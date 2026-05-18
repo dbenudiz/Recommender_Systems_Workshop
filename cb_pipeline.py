@@ -3,13 +3,6 @@ cb_pipeline.py
 
 Content-Based recommendation pipeline for beer recommendations.
 
-This recommends beers based on beer features:
-- beer style
-- ABV
-- average ratings
-- review text
-- review count
-
 Main functions:
 - cb_recommend(user_id, n=10)
 - similar_beers(beer_id, n=10)
@@ -31,26 +24,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-# ─────────────────────────────────────────────
-# 1. PATHS
-# ─────────────────────────────────────────────
-
 BASE_DIR = Path(__file__).resolve().parent
 
 ITEM_PROFILES_PATH = BASE_DIR / "item_profiles_for_cold_start_enriched.csv"
 TRAIN_PATH = BASE_DIR / "train_set_enriched.csv"
 
 
-# ─────────────────────────────────────────────
-# 2. LOAD DATA OR CREATE DEMO DATA
-# ─────────────────────────────────────────────
-
 def make_demo_data():
-    """
-    Small fallback dataset so this file can run before the real CSVs exist.
-    Remove/ignore this once real CSV files are committed.
-    """
-
     item_profiles_demo = pd.DataFrame({
         "beer_id": ["beer_0001", "beer_0002", "beer_0003", "beer_0004", "beer_0005"],
         "beer_name": ["Hoppy IPA", "Dark Stout", "Light Lager", "Sour Ale", "Citrus IPA"],
@@ -69,7 +49,7 @@ def make_demo_data():
             "dark roasted chocolate coffee stout rich",
             "light crisp clean refreshing lager easy drink",
             "sour tart funky acidic fruity ale",
-            "citrus hoppy juicy bitter tropical ipa"
+            "citrus hoppy juicy bitter tropical ipa",
         ],
     })
 
@@ -94,10 +74,6 @@ print(f"Item profiles loaded: {item_profiles.shape}")
 print(f"Train data loaded:    {train_df.shape}")
 
 
-# ─────────────────────────────────────────────
-# 3. CLEAN / PREPARE FEATURES
-# ─────────────────────────────────────────────
-
 text_feature = "all_reviews_text"
 categorical_features = ["beer_style"]
 
@@ -112,28 +88,11 @@ numeric_features = [
     "total_reviews_count",
 ]
 
-required_item_columns = [
-    "beer_id",
-    "beer_name",
-    "beer_style",
-    text_feature,
-] + numeric_features
+required_item_columns = ["beer_id", "beer_name", "beer_style", text_feature] + numeric_features
+required_train_columns = ["username", "beer_id", "rating_overall"]
 
-required_train_columns = [
-    "username",
-    "beer_id",
-    "rating_overall",
-]
-
-missing_item_cols = [
-    col for col in required_item_columns
-    if col not in item_profiles.columns
-]
-
-missing_train_cols = [
-    col for col in required_train_columns
-    if col not in train_df.columns
-]
+missing_item_cols = [col for col in required_item_columns if col not in item_profiles.columns]
+missing_train_cols = [col for col in required_train_columns if col not in train_df.columns]
 
 if missing_item_cols:
     raise ValueError(f"Missing required columns in item_profiles: {missing_item_cols}")
@@ -159,26 +118,14 @@ for col in numeric_features:
 
 train_df["rating_overall"] = pd.to_numeric(
     train_df["rating_overall"],
-    errors="coerce"
+    errors="coerce",
 ).fillna(0)
 
 
-# ─────────────────────────────────────────────
-# 4. BUILD BEER FEATURE MATRIX
-# ─────────────────────────────────────────────
-
 preprocessor = ColumnTransformer(
     transformers=[
-        (
-            "style",
-            OneHotEncoder(handle_unknown="ignore"),
-            categorical_features,
-        ),
-        (
-            "numeric",
-            StandardScaler(),
-            numeric_features,
-        ),
+        ("style", OneHotEncoder(handle_unknown="ignore"), categorical_features),
+        ("numeric", StandardScaler(), numeric_features),
         (
             "text",
             TfidfVectorizer(
@@ -195,62 +142,42 @@ preprocessor = ColumnTransformer(
 beer_feature_matrix = preprocessor.fit_transform(item_profiles)
 
 beer_ids = item_profiles["beer_id"].values
-beer_id_to_index = {
-    beer_id: idx
-    for idx, beer_id in enumerate(beer_ids)
-}
+beer_id_to_index = {beer_id: idx for idx, beer_id in enumerate(beer_ids)}
 
 print(f"Beer feature matrix: {beer_feature_matrix.shape}")
 
 
-# ─────────────────────────────────────────────
-# 5. HELPER FUNCTION: SAFE MATRIX TO ARRAY
-# ─────────────────────────────────────────────
-
 def to_dense_array(matrix):
-    """
-    Converts sparse or dense matrix to a normal NumPy array.
-    Works for both real data and demo data.
-    """
-
     if hasattr(matrix, "toarray"):
         return matrix.toarray()
-
     return np.asarray(matrix)
 
 
-# ─────────────────────────────────────────────
-# 6. SIMILAR BEERS
-# ─────────────────────────────────────────────
+def ensure_2d(matrix):
+    matrix = to_dense_array(matrix)
+    if matrix.ndim == 1:
+        matrix = matrix.reshape(1, -1)
+    return matrix
+
 
 def similar_beers(beer_id, n: int = 10) -> pd.Series:
     """
     Return top-N beers most similar to a given beer.
-
-    Returns
-    -------
-    pd.Series
-        index = beer_id
-        values = content similarity score
     """
 
     if beer_id not in beer_id_to_index:
         raise ValueError(f"Beer id '{beer_id}' not found.")
 
     beer_idx = beer_id_to_index[beer_id]
+    beer_vector = ensure_2d(beer_feature_matrix[beer_idx])
 
     similarities = cosine_similarity(
-        beer_feature_matrix[beer_idx],
+        beer_vector,
         beer_feature_matrix,
     ).flatten()
 
     ranked_indices = np.argsort(similarities)[::-1]
-
-    ranked_indices = [
-        idx for idx in ranked_indices
-        if idx != beer_idx
-    ]
-
+    ranked_indices = [idx for idx in ranked_indices if idx != beer_idx]
     top_indices = ranked_indices[:n]
 
     return pd.Series(
@@ -260,28 +187,17 @@ def similar_beers(beer_id, n: int = 10) -> pd.Series:
     ).sort_values(ascending=False)
 
 
-# ─────────────────────────────────────────────
-# 7. BUILD USER TASTE PROFILE
-# ─────────────────────────────────────────────
-
 def build_user_profile(user_id: str):
     """
     Build a user profile vector from beers the user rated.
-
-    Higher rating_overall means stronger influence.
-    Ratings are normalized from 1–5 scale to 0–1 scale.
     """
 
-    user_reviews = train_df[
-        train_df["username"] == user_id
-    ].copy()
+    user_reviews = train_df[train_df["username"] == user_id].copy()
 
     if user_reviews.empty:
         raise ValueError(f"User '{user_id}' not found in train data.")
 
-    user_reviews = user_reviews[
-        user_reviews["beer_id"].isin(beer_id_to_index)
-    ]
+    user_reviews = user_reviews[user_reviews["beer_id"].isin(beer_id_to_index)]
 
     if user_reviews.empty:
         raise ValueError(
@@ -293,8 +209,7 @@ def build_user_profile(user_id: str):
     ratings = user_reviews["rating_overall"].astype(float).values
     ratings = np.clip(ratings / 5.0, 0.0, 1.0)
 
-    user_beer_vectors = beer_feature_matrix[beer_indices]
-    user_beer_vectors = to_dense_array(user_beer_vectors)
+    user_beer_vectors = ensure_2d(beer_feature_matrix[beer_indices])
 
     user_profile = np.average(
         user_beer_vectors,
@@ -305,18 +220,9 @@ def build_user_profile(user_id: str):
     return user_profile
 
 
-# ─────────────────────────────────────────────
-# 8. CONTENT-BASED RECOMMEND
-# ─────────────────────────────────────────────
-
 def cb_recommend(user_id: str, n: int = 10) -> pd.Series:
     """
     Return top-N content-based beer recommendations for a user.
-
-    Output matches cf_recommend style:
-    pd.Series where:
-        index = beer_id
-        values = cb_score
     """
 
     user_profile = build_user_profile(user_id)
@@ -326,9 +232,7 @@ def cb_recommend(user_id: str, n: int = 10) -> pd.Series:
         beer_feature_matrix,
     ).flatten()
 
-    already_rated = set(
-        train_df[train_df["username"] == user_id]["beer_id"]
-    )
+    already_rated = set(train_df[train_df["username"] == user_id]["beer_id"])
 
     candidate_indices = [
         idx
@@ -340,12 +244,8 @@ def cb_recommend(user_id: str, n: int = 10) -> pd.Series:
         return pd.Series(dtype=float, name="cb_score")
 
     candidate_scores = similarities[candidate_indices]
-
     top_order = np.argsort(candidate_scores)[::-1][:n]
-    top_indices = [
-        candidate_indices[i]
-        for i in top_order
-    ]
+    top_indices = [candidate_indices[i] for i in top_order]
 
     return pd.Series(
         similarities[top_indices],
@@ -354,14 +254,9 @@ def cb_recommend(user_id: str, n: int = 10) -> pd.Series:
     ).sort_values(ascending=False)
 
 
-# ─────────────────────────────────────────────
-# 9. OPTIONAL: DISPLAY RESULTS WITH METADATA
-# ─────────────────────────────────────────────
-
 def get_recommendation_details(scores: pd.Series) -> pd.DataFrame:
     """
     Convert recommendation scores into a readable table with beer metadata.
-    Useful for debugging and GUI display.
     """
 
     if scores.empty:
@@ -384,10 +279,6 @@ def get_recommendation_details(scores: pd.Series) -> pd.DataFrame:
 
     return details.sort_values("cb_score", ascending=False)
 
-
-# ─────────────────────────────────────────────
-# 10. QUICK SANITY TEST
-# ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     sample_user = train_df["username"].iloc[0]
