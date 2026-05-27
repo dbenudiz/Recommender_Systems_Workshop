@@ -12,7 +12,7 @@ log_file_path = r'C:\Users\nitza\OneDrive\Documents\RecSys\bad_rows_log.txt'
 DB_PARAMS = {
     "dbname": "recommend_db",
     "user": "postgres",
-    "password": "123456",
+    "password": "Aa321321",
     "host": "localhost",
     "port": 5432
 }
