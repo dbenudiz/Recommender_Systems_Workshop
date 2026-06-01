@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png'; 
 
-// 1. Updated Navbar with routing clicks
-const Navbar = ({ onLogout, setActiveTab }) => {
+// 1. Updated Navbar with toggle
+const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
@@ -18,10 +18,23 @@ const Navbar = ({ onLogout, setActiveTab }) => {
       </div>
       
       <div className="navbar-right">
-        <button className="nav-link" onClick={() => setActiveTab('favorites')}>Favorites</button>
-        <button className="nav-link" onClick={() => setActiveTab('discover')}>Discover</button>
+        <button className={`nav-link ${activeTab === 'favorites' ? 'active' : ''}`} onClick={() => setActiveTab('favorites')}>Favorites</button>
+        <button className={`nav-link ${activeTab === 'discover' ? 'active' : ''}`} onClick={() => setActiveTab('discover')}>Discover</button>
         <button className="nav-link">Shared With Me</button>
         
+        {/* NEW: Demo Toggle Switch */}
+        <div className="demo-toggle-container">
+          <span className={`demo-label ${isDemoMode ? 'active' : ''}`}>Demo Data</span>
+          <label className="switch">
+            <input 
+              type="checkbox" 
+              checked={isDemoMode} 
+              onChange={() => setIsDemoMode(!isDemoMode)} 
+            />
+            <span className="slider"></span>
+          </label>
+        </div>
+
         <div className="profile-menu-container">
           <button className="hamburger-menu" onClick={() => setDropdownOpen(!dropdownOpen)}>
             <span></span>
@@ -59,19 +72,18 @@ const BottleIcon = ({ filled, onMouseEnter, onMouseLeave, onClick }) => (
   </svg>
 );
 
-// --- UPDATED: Modal Component with Review System ---
+// --- Modal Component with Review System ---
 const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
   if (!beer) return null;
   const matchPercentage = Math.round(beer.match_score * 100);
   
-  // Local state for the interactive rating UI
   const [hoverRating, setHoverRating] = useState(0);
   const [rating, setRating] = useState(userRatingData?.rating || 0);
   const [review, setReview] = useState(userRatingData?.review || '');
 
   const handleSubmit = () => {
     onSubmitReview(beer.id, rating, review);
-    onClose(); // Optional: Close modal after submitting
+    onClose(); 
   };
 
   return (
@@ -81,19 +93,21 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
         <img src={beer.image_url} alt={beer.name} className="modal-image" />
         <div className="modal-details">
           
-          <div className="card-header-row">
-            <div className="match-score" style={{ backgroundColor: '#E67E22', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px', display: 'inline-block', fontSize: '0.85rem', fontWeight: 'bold' }}>
-              {matchPercentage}% Match
-            </div>
-            {/* Show global rating at the top right of the modal */}
-            <div className="card-rating">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
+          {/* Match Score stays at the top left by itself */}
+          <div className="match-score" style={{ backgroundColor: '#E67E22', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px', display: 'inline-block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.8rem' }}>
+            {matchPercentage}% Match
+          </div>
+
+          {/* NEW: Title and Rating locked onto the exact same line */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>{beer.name}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '1.2rem', fontWeight: 'bold', color: '#fff' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
               {beer.rating || "New"}
             </div>
           </div>
 
-          <h2>{beer.name}</h2>
-          <div className="beer-meta">{beer.style} • {beer.abv}% ABV</div>
+          <div className="beer-meta" style={{ marginTop: '0.3rem' }}>{beer.style} • {beer.abv}% ABV</div>
           <div className="modal-divider"></div>
           
           <h3>Why it's a match</h3>
@@ -105,7 +119,6 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
             <span className="tag">Bitter</span>
           </div>
 
-          {/* Interactive Rating Section */}
           <div className="review-section">
             <h3>Log Your Tasting</h3>
             <div className="bottle-rating-container">
@@ -125,6 +138,8 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
               placeholder="What did you think of this brew? (Optional)"
               value={review}
               onChange={(e) => setReview(e.target.value)}
+              spellCheck={false}
+              data-gramm={false}
             />
             <button 
               className="submit-review-btn" 
@@ -141,7 +156,7 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
   );
 };
 
-// --- UPDATED: BeerCard Component ---
+// --- BeerCard Component ---
 const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
   const matchPercentage = Math.round(beer.match_score * 100);
   
@@ -161,13 +176,11 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
         <img src={beer.image_url} alt={beer.name} className="beer-image" />
         <div className="beer-info">
           
-          {/* New Header Row pushes Match Score left and Rating right */}
           <div className="card-header-row">
             <div className="match-score" style={{ color: '#E67E22', fontWeight: 'bold' }}>
               {matchPercentage}% Match
             </div>
             <div className="card-rating">
-              {/* Using a tiny version of our SVG bottle here! */}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22" strokeWidth="2"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
               {beer.rating || "N/A"}
             </div>
@@ -181,7 +194,7 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
   );
 };
 
-// Swimlane (Unchanged)
+// Swimlane
 const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
   return (
     <div className="swimlane">
@@ -201,9 +214,8 @@ const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
   );
 };
 
-// 2. NEW: Favorites Page Component
+// Favorites Page Component
 const FavoritesPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
-  // Filter the full list of beers down to just the ones the user favorited
   const favoritedBeers = allBeers.filter(beer => favorites.includes(beer.id));
 
   if (favoritedBeers.length === 0) {
@@ -233,18 +245,15 @@ const FavoritesPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
   );
 };
 
+// Discover Page Component
 const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+ const [searchQuery, setSearchQuery] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [activeTags, setActiveTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   
-  // 1. Define the "Ignore" boundaries. If a slider is at this value, we ignore it.
   const filterDefaults = { maxAbv: 20, maxDistance: 100, minRating: 0 };
-  
-  // 2. Draft State: What the sliders currently show
   const [draftFilters, setDraftFilters] = useState({ ...filterDefaults });
-  
-  // 3. Applied State: What is actively filtering the list
   const [appliedFilters, setAppliedFilters] = useState({});
 
   const dummyCategories = ["IPA", "Stout", "Lager", "Pilsner", "Ale", "Porter"];
@@ -257,7 +266,6 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
     }
   };
 
-  // Pushes draft values into the "Applied" state ONLY if they were moved
   const handleApplyFilters = () => {
     const newApplied = {};
     if (draftFilters.maxAbv < filterDefaults.maxAbv) newApplied.maxAbv = draftFilters.maxAbv;
@@ -265,10 +273,9 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
     if (draftFilters.minRating > filterDefaults.minRating) newApplied.minRating = draftFilters.minRating;
     
     setAppliedFilters(newApplied);
-    setShowFilters(false); // Auto-closes the panel for a cleaner UX
+    setShowFilters(false); 
   };
 
-  // Removes a specific bubble and resets its slider back to default
   const removeFilter = (key) => {
     const newApplied = { ...appliedFilters };
     delete newApplied[key];
@@ -276,10 +283,9 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
     setDraftFilters({ ...draftFilters, [key]: filterDefaults[key] });
   };
 
-  const filteredBeers = allBeers.filter((beer) => {
-    const matchesSearch = 
-      beer.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      beer.style.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredBeers = allBeers.filter(beer => {
+    const matchesSearch = beer.name.toLowerCase().includes(appliedSearch.toLowerCase()) || 
+                          beer.style.toLowerCase().includes(appliedSearch.toLowerCase());
     
     const matchesTags = activeTags.length === 0 || 
       activeTags.some(tag => beer.style.toLowerCase().includes(tag.toLowerCase()));
@@ -288,7 +294,6 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
     const beerDistance = beer.distance || 0; 
     const beerRating = beer.rating || 5; 
 
-    // Only apply the check if the filter key actually exists in the appliedFilters object
     const matchesAbv = appliedFilters.maxAbv ? beerAbv <= appliedFilters.maxAbv : true;
     const matchesDistance = appliedFilters.maxDistance ? beerDistance <= appliedFilters.maxDistance : true;
     const matchesRating = appliedFilters.minRating ? beerRating >= appliedFilters.minRating : true;
@@ -301,13 +306,23 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
       <h2 className="page-title">Discover</h2>
       
       <div className="search-container">
-        <input 
-          type="text" 
-          className="search-input" 
-          placeholder="Search for a beer name or style..." 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <input 
+            type="text" 
+            className="search-input" 
+            placeholder="Search for a beer name or style..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(searchQuery)}
+            style={{ flex: 1, margin: 0 }} 
+          />
+          <button 
+            onClick={() => setAppliedSearch(searchQuery)}
+            style={{ padding: '0 1.5rem', background: '#E67E22', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Search
+          </button>
+        </div>
         
         <div className="tags-container">
           {dummyCategories.map(category => (
@@ -362,7 +377,6 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
           </div>
         )}
 
-        {/* The Gray Filter Bubbles */}
         {Object.keys(appliedFilters).length > 0 && (
           <div className="active-filters-container">
             {appliedFilters.maxAbv && (
@@ -385,7 +399,6 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
             )}
           </div>
         )}
-
       </div>
 
       <div className="results-header">
@@ -413,24 +426,53 @@ const RecommenderDashboard = ({ data, onLogout }) => {
   const [selectedBeer, setSelectedBeer] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [userRatings, setUserRatings] = useState({});
-  
-  // New state to control which page we are looking at
   const [activeTab, setActiveTab] = useState('home');
 
-  // Helper to extract all unique beers from the swimlanes into one flat array
+  // NEW: State for Demo vs Live API Data
+  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [apiData, setApiData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
+
+  // NEW: The Fetch Hook that triggers when Demo Mode is turned off
+useEffect(() => {
+    if (!isDemoMode) {
+      const fetchLiveData = async () => {
+        setIsLoading(true);
+        setApiError(null);
+        try {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          throw new Error("Python API is not running yet! Please spin up the server."); 
+        } catch (err) {
+          setApiError(err.message);
+          setApiData(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchLiveData();
+    } else {
+      setApiError(null);
+      setIsLoading(false);
+    }
+  }, [isDemoMode]);
+
+  // Determine which data to feed the UI
+  const activeData = isDemoMode ? data : apiData;
+
   const allUniqueBeers = useMemo(() => {
-    if (!data || !data.swimlanes) return [];
-    const allBeers = data.swimlanes.flatMap(lane => lane.beers);
-    // Deduplicate them just in case the same beer is in multiple swimlanes
+    if (!activeData || !activeData.swimlanes) return [];
+    const allBeers = activeData.swimlanes.flatMap(lane => lane.beers);
     return Array.from(new Map(allBeers.map(b => [b.id, b])).values());
-  }, [data]);
+  }, [activeData]);
 
   const handleSubmitReview = (beerId, rating, review) => {
-  setUserRatings(prev => ({
-    ...prev,
-    [beerId]: { rating, review }
-  }));
-};
+    setUserRatings(prev => ({
+      ...prev,
+      [beerId]: { rating, review }
+    }));
+  };
 
   const toggleFavorite = (beerId) => {
     if (favorites.includes(beerId)) {
@@ -440,54 +482,86 @@ const RecommenderDashboard = ({ data, onLogout }) => {
     }
   };
 
-  if (!data || !data.swimlanes) return <div>Loading recommendations...</div>;
+  // If in demo mode but data is still loading from parent, show simple loader
+  if (isDemoMode && (!data || !data.swimlanes)) return <div>Loading recommendations...</div>;
 
   return (
     <div style={{ backgroundColor: '#141414', minHeight: '100vh', paddingBottom: '4rem' }}>
-      {/* Pass the setActiveTab function to the Navbar */}
-      <Navbar onLogout={onLogout} setActiveTab={setActiveTab} />
+      
+      {/* Pass the toggle states to the Navbar */}
+      <Navbar 
+        onLogout={onLogout} 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab} 
+        isDemoMode={isDemoMode}
+        setIsDemoMode={setIsDemoMode}
+      />
       
       <div style={{ padding: '2rem 3rem' }}>
         
-        {/* Conditional Rendering: Show Home OR Favorites based on state */}
-        {activeTab === 'home' && (
-          data.swimlanes.map((lane) => (
-            <Swimlane 
-              key={lane.id} 
-              title={lane.title} 
-              beers={lane.beers} 
-              onCardClick={(beer) => setSelectedBeer(beer)} 
-              favorites={favorites}
-              onToggleFav={toggleFavorite}
-            />
-          ))
+        {/* NEW: Loading State UI */}
+        {!isDemoMode && isLoading && (
+          <div className="empty-state">
+            <h2>Waking up the Recommender Engine...</h2>
+            <p>Connecting to Python Backend...</p>
+          </div>
         )}
 
-        {activeTab === 'favorites' && (
-          <FavoritesPage 
-            allBeers={allUniqueBeers}
-            favorites={favorites}
-            onCardClick={(beer) => setSelectedBeer(beer)}
-            onToggleFav={toggleFavorite}
-          />
+        {/* NEW: Error State UI */}
+        {!isDemoMode && apiError && !isLoading && (
+          <div className="empty-state">
+            <h2>Connection Failed</h2>
+            <p style={{ color: '#ff4d4d' }}>{apiError}</p>
+            <button className="submit-review-btn" onClick={() => setIsDemoMode(true)} style={{ width: 'auto', marginTop: '1rem' }}>
+              Revert to Demo Mode
+            </button>
+          </div>
         )}
-        {activeTab === 'discover' && (
-          <DiscoverPage 
-            allBeers={allUniqueBeers}
-            favorites={favorites}
-            onCardClick={(beer) => setSelectedBeer(beer)}
-            onToggleFav={toggleFavorite}
-          />
+
+        {/* ONLY Render the views if we aren't loading and don't have an error */}
+        {(!isLoading && !apiError) && activeData && activeData.swimlanes && (
+          <>
+            {activeTab === 'home' && (
+              activeData.swimlanes.map((lane) => (
+                <Swimlane 
+                  key={lane.id} 
+                  title={lane.title} 
+                  beers={lane.beers} 
+                  onCardClick={(beer) => setSelectedBeer(beer)} 
+                  favorites={favorites}
+                  onToggleFav={toggleFavorite}
+                />
+              ))
+            )}
+
+            {activeTab === 'favorites' && (
+              <FavoritesPage 
+                allBeers={allUniqueBeers}
+                favorites={favorites}
+                onCardClick={(beer) => setSelectedBeer(beer)}
+                onToggleFav={toggleFavorite}
+              />
+            )}
+            
+            {activeTab === 'discover' && (
+              <DiscoverPage 
+                allBeers={allUniqueBeers}
+                favorites={favorites}
+                onCardClick={(beer) => setSelectedBeer(beer)}
+                onToggleFav={toggleFavorite}
+              />
+            )}
+          </>
         )}
 
       </div>
 
       <BeerModal 
-  beer={selectedBeer} 
-  onClose={() => setSelectedBeer(null)} 
-  userRatingData={selectedBeer ? userRatings[selectedBeer.id] : null}
-  onSubmitReview={handleSubmitReview}
-/>
+        beer={selectedBeer} 
+        onClose={() => setSelectedBeer(null)} 
+        userRatingData={selectedBeer ? userRatings[selectedBeer.id] : null}
+        onSubmitReview={handleSubmitReview}
+      />
     </div>
   );
 };
