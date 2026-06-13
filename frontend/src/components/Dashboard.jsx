@@ -1,15 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png'; 
 
-// 1. Updated Navbar with routing clicks
-const Navbar = ({ onLogout, setActiveTab }) => {
+// 1. Updated Navbar with toggle
+const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
     <nav className="navbar">
       <div className="navbar-left">
-        {/* Clicking the logo takes you home */}
         <img 
           src={logo} 
           alt="RuBeer Logo" 
@@ -19,11 +18,23 @@ const Navbar = ({ onLogout, setActiveTab }) => {
       </div>
       
       <div className="navbar-right">
-        {/* Wiring up the Favorites button */}
-        <button className="nav-link" onClick={() => setActiveTab('favorites')}>Favorites</button>
-        <button className="nav-link">Discover</button>
+        <button className={`nav-link ${activeTab === 'favorites' ? 'active' : ''}`} onClick={() => setActiveTab('favorites')}>Favorites</button>
+        <button className={`nav-link ${activeTab === 'discover' ? 'active' : ''}`} onClick={() => setActiveTab('discover')}>Discover</button>
         <button className="nav-link">Shared With Me</button>
         
+        {/* NEW: Demo Toggle Switch */}
+        <div className="demo-toggle-container">
+          <span className={`demo-label ${isDemoMode ? 'active' : ''}`}>Demo Data</span>
+          <label className="switch">
+            <input 
+              type="checkbox" 
+              checked={isDemoMode} 
+              onChange={() => setIsDemoMode(!isDemoMode)} 
+            />
+            <span className="slider"></span>
+          </label>
+        </div>
+
         <div className="profile-menu-container">
           <button className="hamburger-menu" onClick={() => setDropdownOpen(!dropdownOpen)}>
             <span></span>
@@ -47,10 +58,33 @@ const Navbar = ({ onLogout, setActiveTab }) => {
   );
 };
 
-// Modal Component (Unchanged)
-const BeerModal = ({ beer, onClose }) => {
+const BottleIcon = ({ filled, onMouseEnter, onMouseLeave, onClick }) => (
+  <svg 
+    width="24" height="24" viewBox="0 0 24 24" 
+    fill={filled ? "#E67E22" : "none"} 
+    stroke={filled ? "#E67E22" : "#666"} 
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+    style={{ cursor: 'pointer', transition: 'all 0.1s' }}
+    onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onClick={onClick}
+  >
+    <path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path>
+    <path d="M10 2h4"></path>
+  </svg>
+);
+
+// --- Modal Component with Review System ---
+const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview }) => {
   if (!beer) return null;
   const matchPercentage = Math.round(beer.match_score * 100);
+  
+  const [hoverRating, setHoverRating] = useState(0);
+  const [rating, setRating] = useState(userRatingData?.rating || 0);
+  const [review, setReview] = useState(userRatingData?.review || '');
+
+  const handleSubmit = () => {
+    onSubmitReview(beer.id, rating, review);
+    onClose(); 
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -58,26 +92,71 @@ const BeerModal = ({ beer, onClose }) => {
         <button className="close-button" onClick={onClose}>&times;</button>
         <img src={beer.image_url} alt={beer.name} className="modal-image" />
         <div className="modal-details">
-          <div className="match-score" style={{ backgroundColor: '#E67E22', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px', display: 'inline-block', fontSize: '0.85rem', fontWeight: 'bold' }}>
+          
+          {/* Match Score stays at the top left by itself */}
+          <div className="match-score" style={{ backgroundColor: '#E67E22', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px', display: 'inline-block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.8rem' }}>
             {matchPercentage}% Match
           </div>
-          <h2>{beer.name}</h2>
-          <div className="beer-meta">{beer.style} • {beer.abv}% ABV</div>
+
+          {/* NEW: Title and Rating locked onto the exact same line */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>{beer.name}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '1.2rem', fontWeight: 'bold', color: '#fff' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
+              {beer.rating || "New"}
+            </div>
+          </div>
+
+          <div className="beer-meta" style={{ marginTop: '0.3rem' }}>{beer.style} • {beer.abv}% ABV</div>
           <div className="modal-divider"></div>
+          
           <h3>Why it's a match</h3>
           <p>Based on your preference profiles, this selection lines up beautifully with items you've highly rated.</p>
+          
           <div className="flavor-tags">
             <span className="tag">Crisp</span>
             <span className="tag">Citrus</span>
             <span className="tag">Bitter</span>
           </div>
+
+          <div className="review-section">
+            <h3>Log Your Tasting</h3>
+            <div className="bottle-rating-container">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <BottleIcon 
+                  key={star}
+                  filled={star <= (hoverRating || rating)}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  onClick={() => setRating(star)}
+                />
+              ))}
+            </div>
+            <textarea 
+              className="review-textarea"
+              style={{ resize: 'none' }} 
+              placeholder="What did you think of this brew? (Optional)"
+              value={review}
+              onChange={(e) => setReview(e.target.value)}
+              spellCheck={false}
+              data-gramm={false}
+            />
+            <button 
+              className="submit-review-btn" 
+              disabled={rating === 0}
+              onClick={handleSubmit}
+            >
+              Save Rating
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
   );
 };
 
-// BeerCard (Unchanged)
+// --- BeerCard Component ---
 const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
   const matchPercentage = Math.round(beer.match_score * 100);
   
@@ -96,7 +175,17 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
       <div className="beer-card" onClick={() => onCardClick(beer)}>
         <img src={beer.image_url} alt={beer.name} className="beer-image" />
         <div className="beer-info">
-          <div className="match-score" style={{ color: '#E67E22', fontWeight: 'bold' }}>{matchPercentage}% Match</div>
+          
+          <div className="card-header-row">
+            <div className="match-score" style={{ color: '#E67E22', fontWeight: 'bold' }}>
+              {matchPercentage}% Match
+            </div>
+            <div className="card-rating">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22" strokeWidth="2"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
+              {beer.rating || "N/A"}
+            </div>
+          </div>
+
           <h3 className="beer-title">{beer.name}</h3>
           <div className="beer-meta">{beer.style} • {beer.abv}% ABV</div>
         </div>
@@ -105,7 +194,7 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
   );
 };
 
-// Swimlane (Unchanged)
+// Swimlane
 const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
   return (
     <div className="swimlane">
@@ -125,9 +214,8 @@ const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
   );
 };
 
-// 2. NEW: Favorites Page Component
+// Favorites Page Component
 const FavoritesPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
-  // Filter the full list of beers down to just the ones the user favorited
   const favoritedBeers = allBeers.filter(beer => favorites.includes(beer.id));
 
   if (favoritedBeers.length === 0) {
@@ -157,22 +245,234 @@ const FavoritesPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
   );
 };
 
+// Discover Page Component
+const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
+ const [searchQuery, setSearchQuery] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [activeTags, setActiveTags] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  const filterDefaults = { maxAbv: 20, maxDistance: 100, minRating: 0 };
+  const [draftFilters, setDraftFilters] = useState({ ...filterDefaults });
+  const [appliedFilters, setAppliedFilters] = useState({});
+
+  const dummyCategories = ["IPA", "Stout", "Lager", "Pilsner", "Ale", "Porter"];
+
+  const handleTagClick = (category) => {
+    if (activeTags.includes(category)) {
+      setActiveTags(activeTags.filter(tag => tag !== category));
+    } else {
+      setActiveTags([...activeTags, category]);
+    }
+  };
+
+  const handleApplyFilters = () => {
+    const newApplied = {};
+    if (draftFilters.maxAbv < filterDefaults.maxAbv) newApplied.maxAbv = draftFilters.maxAbv;
+    if (draftFilters.maxDistance < filterDefaults.maxDistance) newApplied.maxDistance = draftFilters.maxDistance;
+    if (draftFilters.minRating > filterDefaults.minRating) newApplied.minRating = draftFilters.minRating;
+    
+    setAppliedFilters(newApplied);
+    setShowFilters(false); 
+  };
+
+  const removeFilter = (key) => {
+    const newApplied = { ...appliedFilters };
+    delete newApplied[key];
+    setAppliedFilters(newApplied);
+    setDraftFilters({ ...draftFilters, [key]: filterDefaults[key] });
+  };
+
+  const filteredBeers = allBeers.filter(beer => {
+    const matchesSearch = beer.name.toLowerCase().includes(appliedSearch.toLowerCase()) || 
+                          beer.style.toLowerCase().includes(appliedSearch.toLowerCase());
+    
+    const matchesTags = activeTags.length === 0 || 
+      activeTags.some(tag => beer.style.toLowerCase().includes(tag.toLowerCase()));
+
+    const beerAbv = beer.abv || 0;
+    const beerDistance = beer.distance || 0; 
+    const beerRating = beer.rating || 5; 
+
+    const matchesAbv = appliedFilters.maxAbv ? beerAbv <= appliedFilters.maxAbv : true;
+    const matchesDistance = appliedFilters.maxDistance ? beerDistance <= appliedFilters.maxDistance : true;
+    const matchesRating = appliedFilters.minRating ? beerRating >= appliedFilters.minRating : true;
+
+    return matchesSearch && matchesTags && matchesAbv && matchesDistance && matchesRating;
+  });
+
+  return (
+    <div>
+      <h2 className="page-title">Discover</h2>
+      
+      <div className="search-container">
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <input 
+            type="text" 
+            className="search-input" 
+            placeholder="Search for a beer name or style..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(searchQuery)}
+            style={{ flex: 1, margin: 0 }} 
+          />
+          <button 
+            onClick={() => setAppliedSearch(searchQuery)}
+            style={{ padding: '0 1.5rem', background: '#E67E22', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Search
+          </button>
+        </div>
+        
+        <div className="tags-container">
+          {dummyCategories.map(category => (
+            <button 
+              key={category}
+              className={`category-tag ${activeTags.includes(category) ? 'active' : ''}`}
+              onClick={() => handleTagClick(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        
+        <button className="filter-toggle-btn" onClick={() => setShowFilters(!showFilters)}>
+          {showFilters ? '- Hide Advanced Filters' : '+ Show Advanced Filters'}
+        </button>
+
+        {showFilters && (
+          <div className="advanced-filters-panel">
+            <div className="filters-grid">
+              <div className="filter-group">
+                <label>Max ABV <span className="filter-value">{draftFilters.maxAbv}%</span></label>
+                <input 
+                  type="range" min="0" max="20" step="0.5" className="filter-slider"
+                  value={draftFilters.maxAbv}
+                  onChange={(e) => setDraftFilters({...draftFilters, maxAbv: Number(e.target.value)})}
+                />
+              </div>
+
+              <div className="filter-group">
+                <label>Max Distance <span className="filter-value">{draftFilters.maxDistance} km</span></label>
+                <input 
+                  type="range" min="1" max="100" step="1" className="filter-slider"
+                  value={draftFilters.maxDistance}
+                  onChange={(e) => setDraftFilters({...draftFilters, maxDistance: Number(e.target.value)})}
+                />
+              </div>
+
+              <div className="filter-group">
+                <label>Min Rating <span className="filter-value">{draftFilters.minRating} Stars</span></label>
+                <input 
+                  type="range" min="0" max="5" step="0.1" className="filter-slider"
+                  value={draftFilters.minRating}
+                  onChange={(e) => setDraftFilters({...draftFilters, minRating: Number(e.target.value)})}
+                />
+              </div>
+            </div>
+            
+            <button className="apply-filters-btn" onClick={handleApplyFilters}>
+              Apply Filters
+            </button>
+          </div>
+        )}
+
+        {Object.keys(appliedFilters).length > 0 && (
+          <div className="active-filters-container">
+            {appliedFilters.maxAbv && (
+              <span className="filter-bubble">
+                Max {appliedFilters.maxAbv}% ABV 
+                <button onClick={() => removeFilter('maxAbv')}>&times;</button>
+              </span>
+            )}
+            {appliedFilters.maxDistance && (
+              <span className="filter-bubble">
+                Within {appliedFilters.maxDistance}km 
+                <button onClick={() => removeFilter('maxDistance')}>&times;</button>
+              </span>
+            )}
+            {appliedFilters.minRating && (
+              <span className="filter-bubble">
+                {appliedFilters.minRating}+ Stars 
+                <button onClick={() => removeFilter('minRating')}>&times;</button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="results-header">
+        Found {filteredBeers.length} {filteredBeers.length === 1 ? 'result' : 'results'}
+      </div>
+
+      {filteredBeers.length > 0 ? (
+        <div className="favorites-grid">
+          {filteredBeers.map((beer) => (
+            <BeerCard key={beer.id} beer={beer} onCardClick={onCardClick} isFav={favorites.includes(beer.id)} onToggleFav={onToggleFav} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <h2>No matches found</h2>
+          <p>Try adjusting your search or clearing some filters.</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // 3. Main Dashboard Component
 const RecommenderDashboard = ({ data, onLogout }) => {
   const [selectedBeer, setSelectedBeer] = useState(null);
   const [favorites, setFavorites] = useState([]);
-  
-  // New state to control which page we are looking at
+  const [userRatings, setUserRatings] = useState({});
   const [activeTab, setActiveTab] = useState('home');
 
-  // Helper to extract all unique beers from the swimlanes into one flat array
+  // NEW: State for Demo vs Live API Data
+  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [apiData, setApiData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
+
+  // NEW: The Fetch Hook that triggers when Demo Mode is turned off
+useEffect(() => {
+    if (!isDemoMode) {
+      const fetchLiveData = async () => {
+        setIsLoading(true);
+        setApiError(null);
+        try {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          throw new Error("Python API is not running yet! Please spin up the server."); 
+        } catch (err) {
+          setApiError(err.message);
+          setApiData(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchLiveData();
+    } else {
+      setApiError(null);
+      setIsLoading(false);
+    }
+  }, [isDemoMode]);
+
+  // Determine which data to feed the UI
+  const activeData = isDemoMode ? data : apiData;
+
   const allUniqueBeers = useMemo(() => {
-    if (!data || !data.swimlanes) return [];
-    const allBeers = data.swimlanes.flatMap(lane => lane.beers);
-    // Deduplicate them just in case the same beer is in multiple swimlanes
+    if (!activeData || !activeData.swimlanes) return [];
+    const allBeers = activeData.swimlanes.flatMap(lane => lane.beers);
     return Array.from(new Map(allBeers.map(b => [b.id, b])).values());
-  }, [data]);
+  }, [activeData]);
+
+  const handleSubmitReview = (beerId, rating, review) => {
+    setUserRatings(prev => ({
+      ...prev,
+      [beerId]: { rating, review }
+    }));
+  };
 
   const toggleFavorite = (beerId) => {
     if (favorites.includes(beerId)) {
@@ -182,41 +482,86 @@ const RecommenderDashboard = ({ data, onLogout }) => {
     }
   };
 
-  if (!data || !data.swimlanes) return <div>Loading recommendations...</div>;
+  // If in demo mode but data is still loading from parent, show simple loader
+  if (isDemoMode && (!data || !data.swimlanes)) return <div>Loading recommendations...</div>;
 
   return (
     <div style={{ backgroundColor: '#141414', minHeight: '100vh', paddingBottom: '4rem' }}>
-      {/* Pass the setActiveTab function to the Navbar */}
-      <Navbar onLogout={onLogout} setActiveTab={setActiveTab} />
+      
+      {/* Pass the toggle states to the Navbar */}
+      <Navbar 
+        onLogout={onLogout} 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab} 
+        isDemoMode={isDemoMode}
+        setIsDemoMode={setIsDemoMode}
+      />
       
       <div style={{ padding: '2rem 3rem' }}>
         
-        {/* Conditional Rendering: Show Home OR Favorites based on state */}
-        {activeTab === 'home' && (
-          data.swimlanes.map((lane) => (
-            <Swimlane 
-              key={lane.id} 
-              title={lane.title} 
-              beers={lane.beers} 
-              onCardClick={(beer) => setSelectedBeer(beer)} 
-              favorites={favorites}
-              onToggleFav={toggleFavorite}
-            />
-          ))
+        {/* NEW: Loading State UI */}
+        {!isDemoMode && isLoading && (
+          <div className="empty-state">
+            <h2>Waking up the Recommender Engine...</h2>
+            <p>Connecting to Python Backend...</p>
+          </div>
         )}
 
-        {activeTab === 'favorites' && (
-          <FavoritesPage 
-            allBeers={allUniqueBeers}
-            favorites={favorites}
-            onCardClick={(beer) => setSelectedBeer(beer)}
-            onToggleFav={toggleFavorite}
-          />
+        {/* NEW: Error State UI */}
+        {!isDemoMode && apiError && !isLoading && (
+          <div className="empty-state">
+            <h2>Connection Failed</h2>
+            <p style={{ color: '#ff4d4d' }}>{apiError}</p>
+            <button className="submit-review-btn" onClick={() => setIsDemoMode(true)} style={{ width: 'auto', marginTop: '1rem' }}>
+              Revert to Demo Mode
+            </button>
+          </div>
+        )}
+
+        {/* ONLY Render the views if we aren't loading and don't have an error */}
+        {(!isLoading && !apiError) && activeData && activeData.swimlanes && (
+          <>
+            {activeTab === 'home' && (
+              activeData.swimlanes.map((lane) => (
+                <Swimlane 
+                  key={lane.id} 
+                  title={lane.title} 
+                  beers={lane.beers} 
+                  onCardClick={(beer) => setSelectedBeer(beer)} 
+                  favorites={favorites}
+                  onToggleFav={toggleFavorite}
+                />
+              ))
+            )}
+
+            {activeTab === 'favorites' && (
+              <FavoritesPage 
+                allBeers={allUniqueBeers}
+                favorites={favorites}
+                onCardClick={(beer) => setSelectedBeer(beer)}
+                onToggleFav={toggleFavorite}
+              />
+            )}
+            
+            {activeTab === 'discover' && (
+              <DiscoverPage 
+                allBeers={allUniqueBeers}
+                favorites={favorites}
+                onCardClick={(beer) => setSelectedBeer(beer)}
+                onToggleFav={toggleFavorite}
+              />
+            )}
+          </>
         )}
 
       </div>
 
-      <BeerModal beer={selectedBeer} onClose={() => setSelectedBeer(null)} />
+      <BeerModal 
+        beer={selectedBeer} 
+        onClose={() => setSelectedBeer(null)} 
+        userRatingData={selectedBeer ? userRatings[selectedBeer.id] : null}
+        onSubmitReview={handleSubmitReview}
+      />
     </div>
   );
 };

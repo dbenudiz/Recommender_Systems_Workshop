@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './LandingPage.css';
 import logo from '../assets/logo.png';
 
-const LandingPage = ({ onLogin }) => {
+const LandingPage = ({ onStartAuth }) => {
   const [isVerified, setIsVerified] = useState(false);
 
   const handleAtudaiClick = () => {
@@ -37,9 +37,20 @@ const LandingPage = ({ onLogin }) => {
         <img src={logo} alt="RuBeer Logo" className="rubeer-logo" />
         <h1 className="hook-text">Stop guessing at the bar. Let our AI find your perfect pint.</h1>
         
-        <div className="auth-container">
-          <button className="btn-secondary" onClick={onLogin}>Log In</button>
-          <button className="btn-primary" onClick={onLogin}>Create New Account</button>
+        {/* Transparent Log In & Solid Orange Create Account Buttons */}
+        <div className="landing-auth-buttons" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'center' }}>
+          <button 
+            onClick={() => onStartAuth(true)}
+            style={{ padding: '0.8rem 1.5rem', background: 'transparent', border: '2px solid #E67E22', borderRadius: '6px', color: '#E67E22', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Log In
+          </button>
+          <button 
+            onClick={() => onStartAuth(false)}
+            style={{ padding: '0.8rem 1.5rem', background: '#E67E22', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Create New Account
+          </button>
         </div>
       </div>
 
@@ -66,7 +77,7 @@ const LandingPage = ({ onLogin }) => {
           </div>
         </div>
 
-        {/* --- NEW SECTION: How It Works --- */}
+        {/* --- How It Works --- */}
         <div className="how-it-works">
           <h2>How It Works</h2>
           <div className="steps-container">
@@ -89,7 +100,7 @@ const LandingPage = ({ onLogin }) => {
         </div>
       </div>
 
-      {/* --- NEW SECTION: Footer --- */}
+      {/* --- Footer --- */}
       <footer className="footer">
         <p>&copy; 2026 RuBeer. Drink responsibly.</p>
       </footer>
