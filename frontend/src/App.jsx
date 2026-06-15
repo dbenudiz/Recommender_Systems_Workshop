@@ -3,6 +3,7 @@ import AuthScreen from './components/AuthScreen';
 import RecommenderDashboard, { BottleIcon } from './components/Dashboard';
 import LandingPage from './components/LandingPage';
 import './components/Dashboard.css';
+import { saveColdStartRatings } from './services/authService';
 import CherryTartImage from './assets/Cherry Tart.jpg';
 import citrusBlastImage from './assets/Citrus Blast.jpg';
 import desertMirageImage from './assets/Sour Ale.jpg';
@@ -171,8 +172,8 @@ const dummyData = {
       <ColdStartQuestionnaire
         beers={coldStartBeers}
         onComplete={(ratings) => {
-          console.log('Cold start ratings:', ratings);
-          // TODO: send `ratings` to the cold-start pipeline endpoint
+          saveColdStartRatings(currentUser.email, ratings);
+          // TODO: also send `ratings` to the cold-start pipeline endpoint
           setNeedsColdStart(false);
         }}
       />

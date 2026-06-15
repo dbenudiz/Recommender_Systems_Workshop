@@ -1,18 +1,26 @@
 import React, { useState } from 'react';
 import './LandingPage.css';
 import logo from '../assets/logo.png';
+import { loginUser, registerUser } from '../services/authService';
 
 const AuthScreen = ({ onLogin, isDemoMode, initialIsLogin, onBack }) => {
   const [isLogin, setIsLogin] = useState(initialIsLogin);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const userData = { email: email || 'demo@rubeer.com' };
-    // New accounts (register) go through the cold-start questionnaire first.
-    const requiresColdStart = !isLogin;
-    onLogin(userData, requiresColdStart);
+    setError('');
+
+    const result = isLogin ? loginUser(email, password) : registerUser(email, password);
+
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+
+    onLogin(result.user, result.user.needsColdStart);
   };
 
   return (
@@ -41,19 +49,25 @@ const AuthScreen = ({ onLogin, isDemoMode, initialIsLogin, onBack }) => {
             required
           />
 
+          {error && (
+            <p style={{ color: '#ff4d4d', fontSize: '0.9rem', textAlign: 'center', margin: 0 }}>
+              {error}
+            </p>
+          )}
+
           <button type="submit" className="btn-primary">
             {isLogin ? 'Log In' : 'Create Account'}
           </button>
 
           {isDemoMode && (
             <p style={{ color: '#888', fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
-              Demo mode: any email/password will work.
+              Demo mode: accounts are stored in your browser only.
             </p>
           )}
         </form>
 
         <div className="auth-container" style={{ marginTop: '1.5rem' }}>
-          <button className="btn-secondary" onClick={() => setIsLogin(!isLogin)}>
+          <button className="btn-secondary" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
             {isLogin ? "Need an account? Sign Up" : 'Already have an account? Log In'}
           </button>
         </div>
