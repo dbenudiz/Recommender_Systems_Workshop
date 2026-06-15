@@ -3,16 +3,18 @@ import AuthScreen from './components/AuthScreen';
 import RecommenderDashboard, { BottleIcon } from './components/Dashboard';
 import LandingPage from './components/LandingPage';
 import './components/Dashboard.css';
-import CherryTartImage from './assets/Cherry Tart.jpg';
-import citrusBlastImage from './assets/Citrus Blast.jpg';
-import desertMirageImage from './assets/Sour Ale.jpg';
-import galacticStoutImage from './assets/Galactic Stout.jpg';
-import hazyHorizonImage from './assets/Hazy Horizon.jpg';
-import midnightPorterImage from './assets/Midnight Porter.jpg';
-import rubyRedImage from './assets/Ruby Red.jpg';
-import crispMorningImage from './assets/Crisp Morning.jpg';
-import goldenHourImage from './assets/Golden Hour.jpg';
-import spicedPumpkinImage from './assets/Spiced Pumpkin.jpg';
+import heroImage from './assets/hero.png';
+
+const CherryTartImage = heroImage;
+const citrusBlastImage = heroImage;
+const desertMirageImage = heroImage;
+const galacticStoutImage = heroImage;
+const hazyHorizonImage = heroImage;
+const midnightPorterImage = heroImage;
+const rubyRedImage = heroImage;
+const crispMorningImage = heroImage;
+const goldenHourImage = heroImage;
+const spicedPumpkinImage = heroImage;
 
 
 // --- COLD START QUESTIONNAIRE ---
