@@ -240,7 +240,7 @@ On startup it loads the CF and CB pipelines (real CSVs if present, otherwise dem
 |---|---|---|
 | `GET` | `/` | Health check |
 | `GET` | `/recommendations/{user_id}?rec_num={int}` | Hybrid CF + CB recommendations for an existing user by id<br>rec_num - optional parameter specifying the number of desired recommendations |
-| `GET` | `/recommendations/group?group={group_ids}&rec_num={int}` | Hybrid CF + CB recommendations for an existing user by id<br>group_ids - string containing comma separated user ids<br>rec_num - optional parameter specifying the number of desired recommendations |
+| `GET` | `/recommendations/group?group={group_ids}&rec_num={int}` | Hybrid CF + CB recommendations for a group of users<br>group_ids - string containing comma separated user ids<br>rec_num - optional parameter specifying the number of desired recommendations |
 | `GET` | `/quiz` | Serves the onboarding quiz config (`quiz_data.json`) |
 | `POST` | `/recommendations/cold-start` | Returns initial recommendations for a new user based on quiz answers |
 
