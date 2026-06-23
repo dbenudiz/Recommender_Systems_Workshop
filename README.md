@@ -35,9 +35,12 @@ Recommender_Systems_Workshop/
 │   └── analyze.py                 # Exploratory data analysis
 ├── frontend/
 │   ├── .env.example               # API base URL config
+│   ├── .env                       # Local API base URL (gitignored, created from .env.example)
 │   └── src/
-│       └── services/
-│           └── apiService.js      # Backend API client
+│       ├── services/
+│       │   └── apiService.js      # Backend API client
+│       └── components/
+│           └── Dashboard.jsx      # Main dashboard with all tabs and beer card rendering
 ```
 
 ---
@@ -179,7 +182,7 @@ ls *.csv
 The frontend is a React + Vite app located in the `frontend/` directory. It connects to the live FastAPI backend, but ships with a **Demo Data** toggle so it can also be explored standalone without the backend or database.
 
 - **Demo Data on** (default): the UI renders bundled sample beers — useful for previewing the interface with no backend running.
-- **Demo Data off**: the UI calls the backend through `src/services/apiService.js` for live recommendations, beer details, and similar beers. Copy `frontend/.env.example` to `frontend/.env` to point at a non-default backend URL.
+- **Demo Data off**: the UI calls the backend through `src/services/apiService.js` for live recommendations, beer details, and similar beers. The `frontend/.env` file (created from `.env.example`) sets the API base URL — defaults to `http://localhost:8000`.
 
 ### Prerequisites — Node.js
 
@@ -214,11 +217,29 @@ Open **http://localhost:5173** in your browser.
 | Age gate | Page loads → click "I am 18 or older" |
 | Age gate reject | Click "I'm an Atudai" → alert appears |
 | Login | Click "Log In" or "Create New Account" → goes to dashboard |
-| Beer modal | Click any beer card → detail modal opens |
+| Beer modal | Click any beer card → detail modal opens with avg rating and match score |
 | Favorites | Click ♡ on a card → heart fills; click "Favorites" in navbar |
 | Empty favorites | Go to Favorites before hearting anything → empty state message |
+| Rate a beer | Open a beer modal → rate it → beer disappears from Home & Discover feeds |
+| Demo ↔ Live toggle | Toggle "Demo Data" off → live recommendations load from the backend |
+| Top 50 | Click "Top 50" tab → shows the 50 highest-rated beers from live data |
+| Adventurous | Click "Adventurous" tab → shows mid-range picks that diverge from your taste (live mode required) |
 | Logo navigation | In dashboard, click the logo → returns to home swimlanes |
 | Logout | Hamburger menu → Logout → back to landing page |
+
+### Frontend features
+
+| Tab | Description | Data source |
+|-----|-------------|-------------|
+| **Home** | Personalized swimlanes ("Top Matches", "You Might Also Like") | `GET /recommendations/{user_id}` — hybrid CF + CB scores, MMR-reranked for diversity |
+| **Favorites** | Beers the user has hearted | Local state (persists in the session) |
+| **Discover** | Searchable, filterable catalog of recommended beers | Same as Home, with client-side search/tag/slider filters |
+| **Top 50** | The 50 highest-rated beers across all users | `GET /beers/top` — sorted by community `avg_overall_rating` from live artifacts |
+| **Adventurous** | Beers that diverge from the user's core taste profile | `GET /recommendations/{user_id}/adventurous` — randomly sampled from positions 50–200 of the user's predicted ranking. "Surprise Me Again" re-rolls the selection |
+
+- Beer cards display a **% Match** badge (personalized hybrid score) on recommendation pages, a **#N rank** badge on Top 50, and an **Avg Rating** label (community average on a 1–5 scale) on all cards.
+- Rated beers are automatically excluded from Home and Discover feeds (both demo and live modes). Favorites remain unaffected.
+- Switching from demo to live mode dynamically fetches a valid user ID from `GET /users/sample` — no hardcoded user IDs.
 
 ---
 
@@ -293,10 +314,13 @@ On startup it loads the CF and CB pipelines (real CSVs if present, otherwise dem
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Health check |
+| `GET` | `/users/sample?n=5` | Returns valid user IDs that exist in both CF and CB pipelines |
 | `GET` | `/recommendations/{user_id}?rec_num={int}` | Hybrid CF + CB recommendations for an existing user by id<br>rec_num - optional parameter specifying the number of desired recommendations |
+| `GET` | `/recommendations/{user_id}/adventurous?rec_num={int}` | Mid-range picks that diverge from the user's core taste profile — randomly sampled from positions 50–200 of the user's predicted ranking |
 | `GET` | `/recommendations/group?group={group_ids}&rec_num={int}` | Hybrid CF + CB recommendations for a group of users<br>group_ids - string containing comma separated user ids<br>rec_num - optional parameter specifying the number of desired recommendations |
 | `GET` | `/quiz` | Serves the onboarding quiz config (`quiz_data.json`) |
 | `POST` | `/recommendations/cold-start` | Returns initial recommendations for a new user based on quiz answers |
+| `GET` | `/beers/top?n=50` | Top-N highest-rated beers from the live artifact data, sorted by community average rating |
 | `GET` | `/beers/{beer_id}` | Full metadata for a single beer |
 | `GET` | `/beers/similar/{beer_id}?n=10` | Similar beers by content similarity |
 | `POST` | `/ratings` | Record a beer rating for real-time recommendation updates |
