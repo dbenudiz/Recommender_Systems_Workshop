@@ -202,6 +202,27 @@ async def submit_rating(payload: dict = Body(...)):
     return {"status": "ok", "excluded": str(beer_id)}
 
 
+@app.get("/beers/top")
+async def get_top_beers(n: int = 50):
+    """Return the top-N highest-rated beers from live artifact data."""
+    df = cb.item_profiles.nlargest(n, "avg_overall_rating")
+    return [
+        {
+            "beer_id": str(row["beer_id"]),
+            "beer_name": str(row["beer_name"]),
+            "beer_style": str(row["beer_style"]),
+            "beer_abv": float(row["beer_abv"]),
+            "avg_overall_rating": float(row.get("avg_overall_rating", 0)),
+            "avg_taste_rating": float(row.get("avg_taste_rating", 0)),
+            "avg_aroma_rating": float(row.get("avg_aroma_rating", 0)),
+            "avg_appearance_rating": float(row.get("avg_appearance_rating", 0)),
+            "avg_palate_rating": float(row.get("avg_palate_rating", 0)),
+            "total_reviews_count": int(row.get("total_reviews_count", 0)),
+        }
+        for _, row in df.iterrows()
+    ]
+
+
 @app.get("/beers/{beer_id}")
 async def get_beer(beer_id: str):
     """Return full metadata for a single beer."""
