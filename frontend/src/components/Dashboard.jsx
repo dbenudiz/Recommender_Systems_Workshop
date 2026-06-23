@@ -6,6 +6,17 @@ import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getS
 const fallbackImage = (name) =>
   `https://placehold.co/200x300/1a1a2e/e67e22?text=${encodeURIComponent(name || 'Beer')}`;
 
+const SCALED_MIN = 0.70;
+const SCALED_MAX = 0.97;
+
+const scaleScores = (scores) => {
+  if (!scores || scores.length === 0) return scores;
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  if (max === min) return scores.map(() => (SCALED_MIN + SCALED_MAX) / 2);
+  return scores.map(s => SCALED_MIN + ((s - min) / (max - min)) * (SCALED_MAX - SCALED_MIN));
+};
+
 // Maps a /beers/{id} response (plus an optional match score) into the shape
 // the existing card/modal UI expects.
 const mapBeerToCard = (beer, score) => ({
@@ -567,6 +578,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
     setError(null);
     try {
       const { recommended_ids, scores } = await getAdventurousRecommendations(userId, 10);
+      const scaled = scaleScores(scores);
       const details = await Promise.all(
         recommended_ids.map((id) => getBeerDetails(id))
       );
@@ -575,7 +587,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
         name: beer.beer_name,
         style: beer.beer_style,
         abv: beer.beer_abv,
-        match_score: scores[i],
+        match_score: scaled[i],
         rating: beer.avg_overall_rating,
         image_url: fallbackImage(beer.beer_name),
       })));
@@ -674,10 +686,11 @@ useEffect(() => {
           }
 
           const { recommended_ids, scores } = await getRecommendations(userId, 20);
+          const scaled = scaleScores(scores);
           const details = await Promise.all(
             recommended_ids.map((id) => getBeerDetails(id))
           );
-          const beers = details.map((beer, i) => mapBeerToCard(beer, scores[i]));
+          const beers = details.map((beer, i) => mapBeerToCard(beer, scaled[i]));
 
           if (cancelled) return;
           setApiData({

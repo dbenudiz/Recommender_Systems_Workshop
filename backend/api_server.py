@@ -50,10 +50,19 @@ async def root():
 
 @app.get("/users/sample")
 async def get_sample_users(n: int = 5):
-    """Return user IDs that are valid in both CF and CB pipelines."""
+    """Return user IDs that are valid in both pipelines and have enough ratings."""
     cb_users = set(cb.train_df["username"].unique())
-    valid = [uid for uid in cf.user_ids if uid in cb_users]
-    return {"user_ids": valid[:n]}
+    MIN_RATINGS = 50
+    valid = []
+    for uid in cf.user_ids:
+        if uid not in cb_users:
+            continue
+        idx = cf.user_id_to_index[uid]
+        if cf.R_sparse.getrow(idx).nnz >= MIN_RATINGS:
+            valid.append(uid)
+        if len(valid) >= n:
+            break
+    return {"user_ids": valid}
 
 
 @app.get("/recommendations/group")
@@ -120,18 +129,16 @@ async def get_adventurous_recommendations(user_id: str, rec_num: int = DEFAULT_R
     """Return beers from the mid-range of a user's predicted scores — adventurous picks
     that diverge from the user's core taste profile."""
     try:
-        # Get a large pool of candidates (top 200) so we can skip the best matches
-        large_pool = get_user_rec_candidates(user_id, 200)
+        large_pool = get_user_rec_candidates(user_id, 500)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Skip the top matches (first 50) and pick from the mid-range (positions 50-150)
-    skip = min(50, len(large_pool) - rec_num)
-    if skip < 0:
-        skip = 0
-    mid_range = large_pool.iloc[skip:]
+    # Filter to the 0.80–0.95 score band for genuine taste divergence
+    mid_range = large_pool[(large_pool >= 0.80) & (large_pool <= 0.95)]
 
-    # Sample randomly from the mid-range for variety
+    if mid_range.empty:
+        mid_range = large_pool.iloc[50:]
+
     sample_size = min(rec_num, len(mid_range))
     if sample_size == 0:
         return {"recommended_ids": [], "scores": []}
