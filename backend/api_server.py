@@ -50,9 +50,10 @@ async def root():
 
 @app.get("/users/sample")
 async def get_sample_users(n: int = 5):
-    """Return a small list of valid user IDs for the frontend."""
-    sample = list(cf.user_ids[:n])
-    return {"user_ids": sample}
+    """Return user IDs that are valid in both CF and CB pipelines."""
+    cb_users = set(cb.train_df["username"].unique())
+    valid = [uid for uid in cf.user_ids if uid in cb_users]
+    return {"user_ids": valid[:n]}
 
 
 @app.get("/recommendations/group")
@@ -314,11 +315,25 @@ def get_user_rec_candidates(user_id: str, candidate_num: int) -> pd.Series:
     # Get runtime exclusions from the online store
     exclude = get_excluded_ids(user_id)
 
-    cb_candidates = cb.cb_recommend(user_id, expanded_candidate_num, exclude_ids=exclude)
-    cf_candidates = cf.cf_recommend(user_id, expanded_candidate_num, exclude_ids=exclude)
+    cf_candidates = cb_candidates = None
+    try:
+        cf_candidates = cf.cf_recommend(user_id, expanded_candidate_num, exclude_ids=exclude)
+    except ValueError:
+        pass
+    try:
+        cb_candidates = cb.cb_recommend(user_id, expanded_candidate_num, exclude_ids=exclude)
+    except ValueError:
+        pass
 
-    # Narrow down the best candidates based on the hybrid scores
-    hybrid_candidates = hybridize_candidates(cf_candidates, cb_candidates, candidate_num)
+    if cf_candidates is None and cb_candidates is None:
+        raise ValueError(f"User '{user_id}' not found in either recommendation pipeline")
+
+    if cf_candidates is not None and cb_candidates is not None:
+        hybrid_candidates = hybridize_candidates(cf_candidates, cb_candidates, candidate_num)
+    elif cf_candidates is not None:
+        hybrid_candidates = cf_candidates.nlargest(candidate_num)
+    else:
+        hybrid_candidates = cb_candidates.nlargest(candidate_num)
 
     # Apply heuristic score adjustments from the online store
     adjustments = get_score_adjustments(user_id)
