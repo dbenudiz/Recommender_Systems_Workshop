@@ -53,6 +53,11 @@ export async function getSampleUsers(n = 5) {
   return request(`/users/sample?n=${n}`);
 }
 
+// GET /beers/top?n={n}
+export async function getTopBeers(n = 50) {
+  return request(`/beers/top?n=${n}`);
+}
+
 // POST /ratings
 export async function submitRating(userId, beerId, rating) {
   return request('/ratings', {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
-import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers } from '../services/apiService';
+import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers } from '../services/apiService';
 
 const fallbackImage = (name) =>
   `https://placehold.co/200x300/1a1a2e/e67e22?text=${encodeURIComponent(name || 'Beer')}`;
@@ -37,6 +37,7 @@ const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }
         <button className={`nav-link ${activeTab === 'favorites' ? 'active' : ''}`} onClick={() => setActiveTab('favorites')}>Favorites</button>
         <button className={`nav-link ${activeTab === 'discover' ? 'active' : ''}`} onClick={() => setActiveTab('discover')}>Discover</button>
         <button className="nav-link">Shared With Me</button>
+        <button className={`nav-link ${activeTab === 'top50' ? 'active' : ''}`} onClick={() => setActiveTab('top50')}>Top 50</button>
         
         {/* NEW: Demo Toggle Switch */}
         <div className="demo-toggle-container">
@@ -489,6 +490,71 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
   );
 };
 
+// Top 50 Page Component
+const TopBeersPage = ({ onCardClick, favorites, onToggleFav }) => {
+  const [topBeers, setTopBeers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTop = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getTopBeers(50);
+        if (cancelled) return;
+        setTopBeers(data.map((beer, i) => ({
+          id: beer.beer_id,
+          name: beer.beer_name,
+          style: beer.beer_style,
+          abv: beer.beer_abv,
+          match_score: 0,
+          rating: beer.avg_overall_rating,
+          image_url: fallbackImage(beer.beer_name),
+          rank: i + 1,
+        })));
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchTop();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return (
+    <div className="empty-state">
+      <h2>Loading Top 50...</h2>
+    </div>
+  );
+
+  if (error) return (
+    <div className="empty-state">
+      <h2>Failed to load Top 50</h2>
+      <p style={{ color: '#ff4d4d' }}>{error}</p>
+    </div>
+  );
+
+  return (
+    <div>
+      <h2 className="page-title">Top 50 Highest Rated Beers</h2>
+      <div className="favorites-grid">
+        {topBeers.map((beer) => (
+          <BeerCard
+            key={beer.id}
+            beer={beer}
+            onCardClick={onCardClick}
+            isFav={favorites.includes(beer.id)}
+            onToggleFav={onToggleFav}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // 3. Main Dashboard Component
 const RecommenderDashboard = ({ data, onLogout }) => {
   const [selectedBeer, setSelectedBeer] = useState(null);
@@ -667,7 +733,16 @@ useEffect(() => {
                 onToggleFav={toggleFavorite}
               />
             )}
+
           </>
+        )}
+
+        {activeTab === 'top50' && (
+          <TopBeersPage
+            onCardClick={(beer) => setSelectedBeer(beer)}
+            favorites={favorites}
+            onToggleFav={toggleFavorite}
+          />
         )}
 
       </div>
