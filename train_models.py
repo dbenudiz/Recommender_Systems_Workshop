@@ -235,7 +235,10 @@ def eval_ranking_cf(
     n_cold_items = 0
 
     test_df = test_df.dropna(subset=RATING_COLS)
-    for username, beer_id, _rating in test_df[RATING_COLS].itertuples(index=False):
+    total = len(test_df)
+    for i, (username, beer_id, _rating) in enumerate(test_df[RATING_COLS].itertuples(index=False)):
+        if i % 2000 == 0:
+            log(f"    CF ranking: {i:,}/{total:,} rows processed ...")
         user_idx = user_id_to_index.get(username)
         if user_idx is None:
             n_cold_users += 1
@@ -253,6 +256,7 @@ def eval_ranking_cf(
         _accumulate_rank(acc, rank, k_values)
         n_evaluated += 1
 
+    log(f"    CF ranking: {total:,}/{total:,} rows processed — done")
     return _finalize_ranking(acc, n_evaluated, k_values), n_evaluated, n_cold_users, n_cold_items
 
 
@@ -277,7 +281,11 @@ def eval_ranking_cb(
         user: group for user, group in cb_train_df.groupby("username")
     }
 
-    for username, user_tests in test_df.groupby("username"):
+    user_groups = list(test_df.groupby("username"))
+    total = len(user_groups)
+    for i, (username, user_tests) in enumerate(user_groups):
+        if i % 2000 == 0:
+            log(f"    CB ranking: {i:,}/{total:,} users processed ...")
         user_reviews = train_by_user.get(username)
         if user_reviews is None or len(user_reviews) == 0:
             n_cold_users += len(user_tests)
@@ -304,6 +312,7 @@ def eval_ranking_cb(
             _accumulate_rank(acc, rank, k_values)
             n_evaluated += 1
 
+    log(f"    CB ranking: {total:,}/{total:,} users processed — done")
     return _finalize_ranking(acc, n_evaluated, k_values), n_evaluated, n_cold_users, n_cold_items
 
 
@@ -350,7 +359,11 @@ def eval_ranking_hybrid(
         user: group for user, group in cb_train_df.groupby("username")
     }
 
-    for username, user_tests in test_df.groupby("username"):
+    user_groups = list(test_df.groupby("username"))
+    total = len(user_groups)
+    for i, (username, user_tests) in enumerate(user_groups):
+        if i % 2000 == 0:
+            log(f"    Hybrid ranking: {i:,}/{total:,} users processed ...")
         cf_user_idx = user_id_to_index.get(username)
         user_reviews = train_by_user.get(username)
         cb_cold = user_reviews is None or len(user_reviews) == 0
@@ -392,6 +405,7 @@ def eval_ranking_hybrid(
             _accumulate_rank(acc, rank, k_values)
             n_evaluated += 1
 
+    log(f"    Hybrid ranking: {total:,}/{total:,} users processed — done")
     return _finalize_ranking(acc, n_evaluated, k_values), n_evaluated, n_cold_users, n_cold_items
 
 
