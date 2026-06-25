@@ -1338,7 +1338,7 @@ const RecommenderDashboard = ({ data, onLogout }) => {
 
           const [recResult, antiResult] = await Promise.all([
             getRecommendations(userId, 20),
-            getAntiRecommendations(userId, 10).catch(() => null),
+            getAntiRecommendations(userId, 10).catch((err) => { console.error('Anti-recommendations failed:', err); return null; }),
           ]);
 
           const { recommended_ids, scores } = recResult;
