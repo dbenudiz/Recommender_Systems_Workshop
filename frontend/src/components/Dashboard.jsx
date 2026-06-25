@@ -86,7 +86,7 @@ const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }
           style={{ position: 'relative', display: 'inline-block' }}
         >
           <button 
-            className={`nav-link ${['discover', 'beer-lists', 'build-six-pack'].includes(activeTab) ? 'active' : ''}`} 
+            className={`nav-link ${['discover', 'beer-lists', 'build-six-pack', 'anti-recommender'].includes(activeTab) ? 'active' : ''}`}
             onClick={() => setActiveTab('discover')}
           >
             Discover
@@ -405,7 +405,7 @@ const FavoritesPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
 };
 
 // --- UPDATED: Beer Lists Page Component ---
-const BeerListsPage = ({ allBeers = [] }) => {
+const BeerListsPage = ({ allBeers = [], onNavigate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [newListSection, setNewListSection] = useState('');
@@ -665,6 +665,29 @@ const BeerListsPage = ({ allBeers = [] }) => {
         <h3 style={{ color: '#E67E22', borderBottom: '1px solid #333', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Curated by RuBeer</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
           {curatedLists.map(list => <ListCard key={list.id} {...list} isCustom={false} />)}
+          <div
+            style={{
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '12px',
+              padding: '1.5rem',
+              minHeight: '160px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-5px)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            onClick={() => onNavigate && onNavigate('anti-recommender')}
+          >
+            <div style={{ fontSize: '2.5rem' }}>&#9888;</div>
+            <div>
+              <h3 style={{ margin: '0 0 0.3rem 0', color: '#fff', fontSize: '1.2rem' }}>Anti-Recommender List</h3>
+              <span style={{ color: '#aaa', fontSize: '0.9rem' }}>Beers you should avoid</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1279,27 +1302,85 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
   );
 };
 
-const AntiRecommendationsSwimlane = ({ beers, onCardClick, favorites, onToggleFav }) => {
-  if (!beers || beers.length === 0) return null;
+const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
+  const [beers, setBeers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchAnti = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
+      const details = await Promise.all(
+        recommended_ids.map((id) => getBeerDetails(id))
+      );
+      setBeers(details.map((beer, i) => ({
+        id: beer.beer_id,
+        name: beer.beer_name,
+        style: beer.beer_style,
+        abv: beer.beer_abv,
+        match_score: scores[i],
+        rating: beer.avg_overall_rating,
+        image_url: fallbackImage(beer.beer_name),
+      })));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userId) fetchAnti();
+  }, [userId]);
+
+  if (!userId) return (
+    <div className="empty-state">
+      <h2>Switch to Live Mode</h2>
+      <p>Anti-recommendations require live data. Toggle off "Demo Data" first.</p>
+    </div>
+  );
+
+  if (loading) return (
+    <div className="empty-state">
+      <h2>Finding beers you should avoid...</h2>
+    </div>
+  );
+
+  if (error) return (
+    <div className="empty-state">
+      <h2>Could not load anti-recommendations</h2>
+      <p style={{ color: '#ff4d4d' }}>{error}</p>
+    </div>
+  );
 
   return (
-    <div className="swimlane anti-swimlane">
-      <div className="anti-header">
-        <span className="anti-icon">&#9888;</span>
-        <h2 className="swimlane-title anti-title">Stay Away From These</h2>
-        <span className="anti-icon">&#9888;</span>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div>
+          <h2 className="page-title" style={{ marginBottom: '0.3rem' }}>Anti-Recommender List</h2>
+          <p style={{ color: '#aaa', margin: 0 }}>
+            Our model is pretty sure you will hate these. Proceed at your own risk.
+          </p>
+        </div>
+        <button
+          className="submit-review-btn"
+          style={{ width: 'auto', padding: '0.6rem 1.5rem', whiteSpace: 'nowrap' }}
+          onClick={fetchAnti}
+        >
+          Refresh List
+        </button>
       </div>
-      <p className="anti-subtitle">Our model is pretty sure you will hate these. Proceed at your own risk.</p>
-      <div className="swimlane-row">
+      <div className="favorites-grid">
         {beers.map((beer) => (
-          <div key={beer.id} className="anti-card-wrapper">
-            <BeerCard
-              beer={beer}
-              onCardClick={onCardClick}
-              isFav={favorites.includes(beer.id)}
-              onToggleFav={onToggleFav}
-            />
-          </div>
+          <BeerCard
+            key={beer.id}
+            beer={beer}
+            onCardClick={onCardClick}
+            isFav={favorites.includes(beer.id)}
+            onToggleFav={onToggleFav}
+          />
         ))}
       </div>
     </div>
@@ -1336,27 +1417,12 @@ const RecommenderDashboard = ({ data, onLogout }) => {
             if (!cancelled) setLiveUserId(userId);
           }
 
-          const [recResult, antiResult] = await Promise.all([
-            getRecommendations(userId, 20),
-            getAntiRecommendations(userId, 10).catch((err) => { console.error('Anti-recommendations failed:', err); return null; }),
-          ]);
-
-          const { recommended_ids, scores } = recResult;
+          const { recommended_ids, scores } = await getRecommendations(userId, 20);
           const scaled = scaleScores(scores);
           const details = await Promise.all(
             recommended_ids.map((id) => getBeerDetails(id))
           );
           const beers = details.map((beer, i) => mapBeerToCard(beer, scaled[i]));
-
-          let antiBeers = [];
-          if (antiResult && antiResult.recommended_ids) {
-            const antiDetails = await Promise.all(
-              antiResult.recommended_ids.map((id) => getBeerDetails(id))
-            );
-            antiBeers = antiDetails.map((beer, i) =>
-              mapBeerToCard(beer, antiResult.scores[i])
-            );
-          }
 
           if (cancelled) return;
           const sorted = [...beers].sort((a, b) => b.match_score - a.match_score);
@@ -1365,7 +1431,6 @@ const RecommenderDashboard = ({ data, onLogout }) => {
               { id: 'top-matches', title: 'Top Matches for You', beers: sorted.slice(0, 10) },
               { id: 'also-like', title: 'You Might Also Like', beers: sorted.slice(10) },
             ],
-            antiBeers,
           });
         } catch (err) {
           if (cancelled) return;
@@ -1478,14 +1543,6 @@ const RecommenderDashboard = ({ data, onLogout }) => {
                     onToggleFav={toggleFavorite}
                   />
                 ))}
-                {!isDemoMode && activeData.antiBeers && activeData.antiBeers.length > 0 && (
-                  <AntiRecommendationsSwimlane
-                    beers={activeData.antiBeers.filter(b => !userRatings[b.id])}
-                    onCardClick={(beer) => setSelectedBeer(beer)}
-                    favorites={favorites}
-                    onToggleFav={toggleFavorite}
-                  />
-                )}
               </>
             )}
 
@@ -1507,7 +1564,15 @@ const RecommenderDashboard = ({ data, onLogout }) => {
               />
             )}
 
-            {activeTab === 'beer-lists' && <BeerListsPage allBeers={allUniqueBeers} />}
+            {activeTab === 'beer-lists' && <BeerListsPage allBeers={allUniqueBeers} onNavigate={setActiveTab} />}
+            {activeTab === 'anti-recommender' && (
+              <AntiRecommenderPage
+                userId={liveUserId}
+                onCardClick={(beer) => setSelectedBeer(beer)}
+                favorites={favorites}
+                onToggleFav={toggleFavorite}
+              />
+            )}
             {activeTab === 'build-six-pack' && <BuildSixPackPage allBeers={allUniqueBeers} onCardClick={(beer) => setSelectedBeer(beer)} />}
           </>
         )}
