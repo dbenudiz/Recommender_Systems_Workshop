@@ -296,7 +296,7 @@ print(sample_predictions.round(3))
 # 6. CF RECOMMEND
 # ─────────────────────────────────────────────
 
-def cf_recommend(user_id: str, n: int = 10, exclude_ids=None) -> pd.Series:
+def cf_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = False) -> pd.Series:
     """
     Return the top-N beer recommendations for a user.
 
@@ -323,7 +323,7 @@ def cf_recommend(user_id: str, n: int = 10, exclude_ids=None) -> pd.Series:
     scores = pd.Series(predicted_row, index=beer_ids).drop(index=beer_ids[rated_cols])
     if exclude_ids:
         scores = scores.drop(index=[bid for bid in exclude_ids if bid in scores.index], errors='ignore')
-    return scores.nlargest(n)
+    return scores.nsmallest(n) if ascending else scores.nlargest(n)
 
 
 # ── Quick sanity check ────────────────────────────────────────────────────────

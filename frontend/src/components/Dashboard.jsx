@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
-import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations } from '../services/apiService';
+import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
 
 const fallbackImage = (name) =>
   `https://placehold.co/200x300/1a1a2e/e67e22?text=${encodeURIComponent(name || 'Beer')}`;
@@ -654,6 +654,33 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
   );
 };
 
+const AntiRecommendationsSwimlane = ({ beers, onCardClick, favorites, onToggleFav }) => {
+  if (!beers || beers.length === 0) return null;
+
+  return (
+    <div className="swimlane anti-swimlane">
+      <div className="anti-header">
+        <span className="anti-icon">&#9888;</span>
+        <h2 className="swimlane-title anti-title">Stay Away From These</h2>
+        <span className="anti-icon">&#9888;</span>
+      </div>
+      <p className="anti-subtitle">Our model is pretty sure you will hate these. Proceed at your own risk.</p>
+      <div className="swimlane-row">
+        {beers.map((beer) => (
+          <div key={beer.id} className="anti-card-wrapper">
+            <BeerCard
+              beer={beer}
+              onCardClick={onCardClick}
+              isFav={favorites.includes(beer.id)}
+              onToggleFav={onToggleFav}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // 3. Main Dashboard Component
 const RecommenderDashboard = ({ data, onLogout }) => {
   const [selectedBeer, setSelectedBeer] = useState(null);
@@ -685,12 +712,27 @@ useEffect(() => {
             if (!cancelled) setLiveUserId(userId);
           }
 
-          const { recommended_ids, scores } = await getRecommendations(userId, 20);
+          const [recResult, antiResult] = await Promise.all([
+            getRecommendations(userId, 20),
+            getAntiRecommendations(userId, 10).catch(() => null),
+          ]);
+
+          const { recommended_ids, scores } = recResult;
           const scaled = scaleScores(scores);
           const details = await Promise.all(
             recommended_ids.map((id) => getBeerDetails(id))
           );
           const beers = details.map((beer, i) => mapBeerToCard(beer, scaled[i]));
+
+          let antiBeers = [];
+          if (antiResult && antiResult.recommended_ids) {
+            const antiDetails = await Promise.all(
+              antiResult.recommended_ids.map((id) => getBeerDetails(id))
+            );
+            antiBeers = antiDetails.map((beer, i) =>
+              mapBeerToCard(beer, antiResult.scores[i])
+            );
+          }
 
           if (cancelled) return;
           setApiData({
@@ -698,6 +740,7 @@ useEffect(() => {
               { id: 'top-matches', title: 'Top Matches for You', beers: beers.slice(0, 10) },
               { id: 'also-like', title: 'You Might Also Like', beers: beers.slice(10) },
             ],
+            antiBeers,
           });
         } catch (err) {
           if (cancelled) return;
@@ -804,16 +847,26 @@ useEffect(() => {
         {(!isLoading && !apiError) && activeData && activeData.swimlanes && (
           <>
             {activeTab === 'home' && (
-              activeData.swimlanes.map((lane) => (
-                <Swimlane
-                  key={lane.id}
-                  title={lane.title}
-                  beers={lane.beers.filter(b => !userRatings[b.id])}
-                  onCardClick={(beer) => setSelectedBeer(beer)}
-                  favorites={favorites}
-                  onToggleFav={toggleFavorite}
-                />
-              ))
+              <>
+                {activeData.swimlanes.map((lane) => (
+                  <Swimlane
+                    key={lane.id}
+                    title={lane.title}
+                    beers={lane.beers.filter(b => !userRatings[b.id])}
+                    onCardClick={(beer) => setSelectedBeer(beer)}
+                    favorites={favorites}
+                    onToggleFav={toggleFavorite}
+                  />
+                ))}
+                {!isDemoMode && activeData.antiBeers && activeData.antiBeers.length > 0 && (
+                  <AntiRecommendationsSwimlane
+                    beers={activeData.antiBeers.filter(b => !userRatings[b.id])}
+                    onCardClick={(beer) => setSelectedBeer(beer)}
+                    favorites={favorites}
+                    onToggleFav={toggleFavorite}
+                  />
+                )}
+              </>
             )}
 
             {activeTab === 'favorites' && (

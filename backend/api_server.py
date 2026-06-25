@@ -151,6 +151,19 @@ async def get_adventurous_recommendations(user_id: str, rec_num: int = DEFAULT_R
         "scores": sampled.values.tolist(),
     }
 
+@app.get("/recommendations/{user_id}/anti")
+async def get_anti_recommendations(user_id: str, rec_num: int = DEFAULT_RECOMMENDATION_NUM):
+    """Return beers the user is predicted to dislike the most — the anti-recommendations."""
+    try:
+        anti_candidates = get_user_anti_candidates(user_id, rec_num)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {
+        "recommended_ids": anti_candidates.index.tolist(),
+        "scores": anti_candidates.values.tolist(),
+    }
+
 @app.get("/quiz")
 async def get_quiz():
     """Serve the onboarding quiz configuration to the frontend."""
@@ -402,6 +415,34 @@ def get_user_rec_candidates(user_id: str, candidate_num: int) -> pd.Series:
         hybrid_candidates = hybrid_candidates.sort_values(ascending=False)
 
     return hybrid_candidates
+
+def get_user_anti_candidates(user_id: str, candidate_num: int) -> pd.Series:
+    expanded_candidate_num = HYBRID_MULTIPLIER * candidate_num
+
+    exclude = get_excluded_ids(user_id)
+
+    cf_candidates = cb_candidates = None
+    try:
+        cf_candidates = cf.cf_recommend(user_id, expanded_candidate_num, exclude_ids=exclude, ascending=True)
+    except ValueError:
+        pass
+    try:
+        cb_candidates = cb.cb_recommend(user_id, expanded_candidate_num, exclude_ids=exclude, ascending=True)
+    except ValueError:
+        pass
+
+    if cf_candidates is None and cb_candidates is None:
+        raise ValueError(f"User '{user_id}' not found in either recommendation pipeline")
+
+    if cf_candidates is not None and cb_candidates is not None:
+        hybridized = hybrid_scores(cf_candidates, cb_candidates, STANDARD_CF_WEIGHT)
+        anti_candidates = hybridized.nsmallest(candidate_num)
+    elif cf_candidates is not None:
+        anti_candidates = cf_candidates.nsmallest(candidate_num)
+    else:
+        anti_candidates = cb_candidates.nsmallest(candidate_num)
+
+    return anti_candidates
 
 def get_group_candidates(group_ids: list, candidate_num: int, penalty_weight: float = STANDARD_GROUP_PENALTY) -> pd.Series:
     """

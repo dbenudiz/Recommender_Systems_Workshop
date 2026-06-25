@@ -242,7 +242,7 @@ def build_user_profile(user_id: str):
     return user_profile
 
 
-def cb_recommend(user_id: str, n: int = 10, exclude_ids=None) -> pd.Series:
+def cb_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = False) -> pd.Series:
     """
     Return top-N content-based beer recommendations for a user.
     """
@@ -273,14 +273,17 @@ def cb_recommend(user_id: str, n: int = 10, exclude_ids=None) -> pd.Series:
         return pd.Series(dtype=float, name="cb_score")
 
     candidate_scores = similarities[candidate_indices]
-    top_order = np.argsort(candidate_scores)[::-1][:n]
-    top_indices = [candidate_indices[i] for i in top_order]
+    if ascending:
+        order = np.argsort(candidate_scores)[:n]
+    else:
+        order = np.argsort(candidate_scores)[::-1][:n]
+    top_indices = [candidate_indices[i] for i in order]
 
     return pd.Series(
         similarities[top_indices],
         index=item_profiles.iloc[top_indices]["beer_id"].values,
         name="cb_score",
-    ).sort_values(ascending=False)
+    ).sort_values(ascending=ascending)
 
 
 def get_recommendation_details(scores: pd.Series) -> pd.DataFrame:

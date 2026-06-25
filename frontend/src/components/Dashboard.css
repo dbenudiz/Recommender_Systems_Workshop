@@ -721,3 +721,67 @@ input:checked + .slider:before {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* ── Anti-Recommendations (Toxic Theme) ────────────────── */
+.anti-swimlane {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.08), rgba(245, 158, 11, 0.06));
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.anti-swimlane::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #dc2626, #f59e0b, #dc2626);
+}
+
+.anti-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.2rem;
+}
+
+.anti-icon {
+  font-size: 1.5rem;
+  color: #f59e0b;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.anti-title {
+  color: #dc2626 !important;
+  margin: 0 !important;
+}
+
+.anti-subtitle {
+  color: #a1a1aa;
+  font-size: 0.9rem;
+  margin: 0 0 1rem 0;
+  font-style: italic;
+}
+
+.anti-card-wrapper .beer-card {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: linear-gradient(180deg, #1e1e1e, rgba(220, 38, 38, 0.05));
+}
+
+.anti-card-wrapper .beer-card:hover {
+  border-color: rgba(220, 38, 38, 0.6);
+  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.15);
+}
+
+.anti-card-wrapper .match-score {
+  color: #dc2626 !important;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

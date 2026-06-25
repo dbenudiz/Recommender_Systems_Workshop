@@ -63,6 +63,11 @@ export async function getAdventurousRecommendations(userId, recNum = 10) {
   return request(`/recommendations/${encodeURIComponent(userId)}/adventurous?rec_num=${recNum}`);
 }
 
+// GET /recommendations/{userId}/anti?rec_num={n}
+export async function getAntiRecommendations(userId, recNum = 10) {
+  return request(`/recommendations/${encodeURIComponent(userId)}/anti?rec_num=${recNum}`);
+}
+
 // POST /ratings
 export async function submitRating(userId, beerId, rating) {
   return request('/ratings', {
