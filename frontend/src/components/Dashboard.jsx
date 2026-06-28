@@ -2,9 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import './Dashboard.css';
 import logo from '../assets/logo.png';
 import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
-
-const fallbackImage = (name) =>
-  `https://placehold.co/200x300/1a1a2e/e67e22?text=${encodeURIComponent(name || 'Beer')}`;
+import { getBeerImage, DEFAULT_BEER_IMAGE } from '../utils/beerImages';
 
 const SCALED_MIN = 0.70;
 const SCALED_MAX = 0.97;
@@ -26,7 +24,7 @@ const mapBeerToCard = (beer, score) => ({
   abv: beer.beer_abv,
   match_score: typeof score === 'number' ? score : 0,
   rating: beer.avg_overall_rating,
-  image_url: fallbackImage(beer.beer_name),
+  image_url: getBeerImage(beer.beer_style, beer.beer_id),
 });
 
 const GroupSwitcher = ({ partyMembers, onApplyMembers, friendDatabase }) => {
@@ -330,7 +328,12 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
       </button>
 
       <div className="beer-card" onClick={() => onCardClick(beer)}>
-        <img src={beer.image_url} alt={beer.name} className="beer-image" />
+        <img
+          src={beer.image_url}
+          alt={beer.name}
+          className="beer-image"
+          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_BEER_IMAGE; }}
+        />
         <div className="beer-info">
           
           <div className="card-header-row">
@@ -756,12 +759,12 @@ const BuildSixPackPage = ({ allBeers = [], onCardClick }) => {
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)", "Emily (Sour Queen)"];
 
   const fallbackBeers = [
-    { id: 'f1', name: 'Cosmic IPA', style: 'IPA', abv: 6.5, image_url: 'https://images.unsplash.com/photo-1575037614876-c38db4ce845d?auto=format&fit=crop&q=80&w=200&h=200' },
-    { id: 'f2', name: 'Midnight Stout', style: 'Stout', abv: 8.0, image_url: 'https://images.unsplash.com/photo-1585228351543-080ed8586071?auto=format&fit=crop&q=80&w=200&h=200' },
-    { id: 'f3', name: 'Sunny Pilsner', style: 'Pilsner', abv: 5.0, image_url: 'https://images.unsplash.com/photo-1518176258769-f227c798150e?auto=format&fit=crop&q=80&w=200&h=200' },
-    { id: 'f4', name: 'Hazy Horizon', style: 'NEIPA', abv: 7.2, image_url: 'https://images.unsplash.com/photo-1657223067332-901ba1df2172?auto=format&fit=crop&q=80&w=200&h=200' },
-    { id: 'f5', name: 'Amber Echo', style: 'Amber Ale', abv: 5.5, image_url: 'https://images.unsplash.com/photo-1600174095431-7e828135da17?auto=format&fit=crop&q=80&w=200&h=200' },
-    { id: 'f6', name: 'Crisp Cider', style: 'Cider', abv: 4.5, image_url: 'https://images.unsplash.com/photo-1552675979-994c921df4ee?auto=format&fit=crop&q=80&w=200&h=200' },
+    { id: 'f1', name: 'Cosmic IPA',     style: 'IPA',       abv: 6.5, image_url: getBeerImage('IPA', 'f1') },
+    { id: 'f2', name: 'Midnight Stout', style: 'Stout',     abv: 8.0, image_url: getBeerImage('Stout', 'f2') },
+    { id: 'f3', name: 'Sunny Pilsner',  style: 'Pilsner',   abv: 5.0, image_url: getBeerImage('Pilsner', 'f3') },
+    { id: 'f4', name: 'Hazy Horizon',   style: 'NEIPA',     abv: 7.2, image_url: getBeerImage('NEIPA', 'f4') },
+    { id: 'f5', name: 'Amber Echo',     style: 'Amber Ale', abv: 5.5, image_url: getBeerImage('Amber Ale', 'f5') },
+    { id: 'f6', name: 'Crisp Cider',    style: 'Cider',     abv: 4.5, image_url: getBeerImage('Cider', 'f6') },
   ];
 
   const handleAddFriend = (e) => {
@@ -1169,7 +1172,7 @@ const TopBeersPage = ({ onCardClick, favorites, onToggleFav }) => {
           abv: beer.beer_abv,
           match_score: 0,
           rating: beer.avg_overall_rating,
-          image_url: fallbackImage(beer.beer_name),
+          image_url: getBeerImage(beer.beer_style, beer.beer_id),
           rank: i + 1,
         })));
       } catch (err) {
@@ -1240,7 +1243,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
         abv: beer.beer_abv,
         match_score: scaled[i],
         rating: beer.avg_overall_rating,
-        image_url: fallbackImage(beer.beer_name),
+        image_url: getBeerImage(beer.beer_style, beer.beer_id),
       })));
     } catch (err) {
       if (!mountedRef.current) return;
@@ -1331,7 +1334,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
         abv: beer.beer_abv,
         match_score: scores[i],
         rating: beer.avg_overall_rating,
-        image_url: fallbackImage(beer.beer_name),
+        image_url: getBeerImage(beer.beer_style, beer.beer_id),
       })));
     } catch (err) {
       if (!mountedRef.current) return;
