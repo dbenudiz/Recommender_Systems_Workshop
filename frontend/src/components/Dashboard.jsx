@@ -1446,6 +1446,7 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
 
           // 2. Real user: fetch recommendations using their actual identity.
           if (userId) {
+            let fetchedFromRealUser = false;
             try {
               const { recommended_ids, scores } = await getRecommendations(userId, 20);
               const scaled = scaleScores(scores);
@@ -1461,10 +1462,11 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
                   { id: 'also-like', title: 'You Might Also Like', beers: sorted.slice(10) },
                 ],
               });
+              fetchedFromRealUser = true;
             } catch {
-              // User has no session ratings yet — keep showing current data (cold-start recs)
+              // User not in CF pipeline — fall through to sample user below
             }
-            return;
+            if (fetchedFromRealUser) return;
           }
 
           // 3. Demo mode with a sample user (unchanged behaviour).
