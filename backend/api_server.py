@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 import cf_pipeline as cf
@@ -51,8 +52,8 @@ def _persist_rating(user_id: str, beer_id, rating: float) -> None:
             "rating_overall": rating,
         }])
         row.to_csv(NEW_RATINGS_PATH, mode="a", header=write_header, index=False)
-    except Exception:
-        pass  # persistence is best-effort; never block the rating response
+    except Exception as exc:
+        logging.warning("Failed to persist rating to %s: %s", NEW_RATINGS_PATH, exc)
 
 
 @app.on_event("startup")

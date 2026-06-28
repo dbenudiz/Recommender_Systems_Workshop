@@ -154,7 +154,7 @@ Initializing Database Schema...
 
 ---
 
-### 7. Generate the enriched CSV files
+### 7. Generate the CSV data files
 
 This runs feature engineering and splits the data into train / validation / test sets.
 
@@ -162,17 +162,26 @@ This runs feature engineering and splits the data into train / validation / test
 py data_processing/pipeline.py
 ```
 
-This writes four files to the project root:
+This writes four files into a `data/` subdirectory at the project root:
 ```
-train_set_enriched.csv
-val_set_enriched.csv
-test_set_enriched.csv
-item_profiles_for_cold_start_enriched.csv
+data/train_set.csv
+data/val_set.csv
+data/test_set.csv
+data/item_profiles_for_cold_start.csv
 ```
+
+> **Note:** Files were previously named `*_enriched.csv` and placed in the project root. They are now in `data/` without the `_enriched` suffix. If you have old copies, move and rename them accordingly:
+> ```powershell
+> mkdir data
+> Move-Item train_set_enriched.csv     data/train_set.csv
+> Move-Item val_set_enriched.csv       data/val_set.csv
+> Move-Item test_set_enriched.csv      data/test_set.csv
+> Move-Item item_profiles_for_cold_start_enriched.csv data/item_profiles_for_cold_start.csv
+> ```
 
 Verify they were created:
 ```powershell
-ls *.csv
+ls data/
 ```
 
 ---
@@ -252,7 +261,7 @@ py cf_pipeline.py    # Collaborative Filtering — prints sample recommendations
 py cb_pipeline.py    # Content-Based — prints sample recommendations
 ```
 
-Both pipelines automatically use the real CSVs (`train_set_enriched.csv`, `item_profiles_for_cold_start_enriched.csv`) if they are present in the project root, otherwise they fall back to a small synthetic/demo dataset (`dummy_data.py` for CF, an in-memory mini catalog for CB).
+Both pipelines automatically use the real CSVs (`data/train_set.csv`, `data/item_profiles_for_cold_start.csv`) if they are present, otherwise they fall back to a small synthetic/demo dataset (`dummy_data.py` for CF, an in-memory mini catalog for CB).
 
 The CF pipeline operates on the rating matrix entirely via sparse matrices, so it scales to the full dataset (tens of thousands of users × beers) without the memory blowups a dense matrix would cause.
 
@@ -265,6 +274,14 @@ The script evaluates k ∈ {5, 10, 20, 50} and selects the k with lowest validat
 
 Artifacts are saved to `artifacts/` and loaded at server startup for fast inference.
 
+#### Tune hybrid CF/CB weights
+
+```powershell
+py train_models.py --tune-weights
+```
+
+Sweeps CF weights `[0.3, 0.4, 0.5, 0.6, 0.7, 0.8]` on the validation set using a single-pass approach and prints Hit Rate@10 for each blend. Useful for verifying that the current `STANDARD_CF_WEIGHT = 0.6` (in `backend/api_server.py`) is still optimal after new data is added.
+
 ---
 
 ## Real-Time Feedback Loop
@@ -272,9 +289,13 @@ Artifacts are saved to `artifacts/` and loaded at server startup for fast infere
 When a user rates a beer through the UI, the system updates recommendations in real time:
 
 1. **Immediate exclusion** — the rated beer is removed from all future recommendation responses for that user.
-2. **Heuristic score adjustment** — if the rating is high (≥ 4), similar beers get a 20% score boost. If low (≤ 2), similar beers get a 20% penalty. This shifts the recommendation ranking without recomputing the heavy SVD/TF-IDF matrices.
+2. **Heuristic score adjustment** — if the rating is high (≥ 4), similar beers get a 20% score boost. If low (≤ 2), similar beers get a 20% penalty.
+3. **SVD fold-in (existing users)** — once a session rating is recorded, subsequent recommendation requests re-project the user's updated rating vector into the existing latent space, giving live-updated predictions without retraining.
+4. **CF fold-in (new users)** — once a new user accumulates ≥ 5 session ratings (`MIN_FOLDIN_RATINGS`), CF recommendations are generated via fold-in as well.
 
-The feedback state is held in memory (`backend/online_store.py`) and resets on server restart. This is by design — the offline `train_models.py` pipeline handles durable model updates.
+All session ratings are also appended to `new_ratings.csv` in the project root (best-effort, non-blocking) for eventual use in offline retraining.
+
+The in-memory feedback state (`backend/online_store.py`) resets on server restart. The `new_ratings.csv` file persists across restarts and can be merged into the training data before the next `train_models.py` run.
 
 ### API
 
@@ -327,15 +348,19 @@ On startup it loads the CF and CB pipelines (real CSVs if present, otherwise dem
 
 ### Cold-start flow (new users)
 
-1. Frontend calls `GET /quiz` to fetch and render the onboarding questions (taste clusters: hoppy, dark, sour, light).
-2. User answers each question on a 1–5 scale.
-3. Frontend posts the answers:
+1. New users complete a 10-beer rating questionnaire in the frontend UI.
+2. Ratings are mapped to four style clusters: `hoppy`, `dark`, `sour`, `light` (see `COLD_START_BEER_CLUSTERS` in `App.jsx`).
+3. Frontend computes average cluster scores and posts them to `/recommendations/cold-start`:
    ```powershell
    Invoke-RestMethod -Uri http://localhost:8000/recommendations/cold-start `
      -Method Post -ContentType "application/json" `
      -Body '{"answers": {"hoppy": 5, "dark": 1, "sour": 1, "light": 2}}'
    ```
-4. The response contains `recommended_ids` and matching `scores`, computed by `cold_start.get_cold_start_recommendations()` from a blend of quiz-based style matching and overall beer popularity — in the same format as `cb_recommend`/`cf_recommend`.
+4. The dashboard opens immediately showing personalised "Top Matches" built from the quiz cluster scores — no need to wait for more interactions.
+5. As the user rates beers in the app, CB recommendations update continuously; CF fold-in kicks in after ≥ 5 ratings.
+6. All quiz and in-app ratings are persisted to `new_ratings.csv` for future retraining.
+
+> Quiz answers can also be fetched directly: `GET /quiz` returns the onboarding question config (`quiz_data.json`).
 
 ---
 
@@ -372,6 +397,7 @@ When the real CSVs are present, the CB pipeline tests run against the full beer 
 | `database "recommend_db" does not exist` | Database not created | Run `psql -U postgres -c "CREATE DATABASE recommend_db;"` |
 | `authentication failed for user "postgres"` | Wrong password in `DB_PARAMS` | Update `password` in both `process_json.py` and `pipeline.py` |
 | No CSV files after running `pipeline.py` | `process_json.py` failed first | Check the output of `process_json.py` for errors before running `pipeline.py` |
+| `FileNotFoundError: data/train_set.csv` | CSVs are in the old root location with `_enriched` suffix | Create `data/` and rename files per step 7 above |
 | `npm` not recognised | Node.js not installed or not in PATH | Install from nodejs.org, then reopen PowerShell |
 | `npm install` fails with peer dependency errors | Node.js version too old | Install the LTS version from nodejs.org |
 | `http://localhost:5173` shows blank page | Dev server not running | Make sure `npm run dev` is still running in the terminal |

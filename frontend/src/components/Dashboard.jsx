@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
 import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
@@ -1218,16 +1218,21 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
   const [beers, setBeers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const mountedRef = useRef(true);
 
-  const fetchAdventurous = async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const fetchAdventurous = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { recommended_ids, scores } = await getAdventurousRecommendations(userId, 10);
       const scaled = scaleScores(scores);
-      const details = await Promise.all(
-        recommended_ids.map((id) => getBeerDetails(id))
-      );
+      const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
+      if (!mountedRef.current) return;
       setBeers(details.map((beer, i) => ({
         id: beer.beer_id,
         name: beer.beer_name,
@@ -1238,41 +1243,16 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
         image_url: fallbackImage(beer.beer_name),
       })));
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { recommended_ids, scores } = await getAdventurousRecommendations(userId, 10);
-        const scaled = scaleScores(scores);
-        const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
-        if (cancelled) return;
-        setBeers(details.map((beer, i) => ({
-          id: beer.beer_id,
-          name: beer.beer_name,
-          style: beer.beer_style,
-          abv: beer.beer_abv,
-          match_score: scaled[i],
-          rating: beer.avg_overall_rating,
-          image_url: fallbackImage(beer.beer_name),
-        })));
-      } catch (err) {
-        if (cancelled) return;
-        setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
+    if (userId) fetchAdventurous();
+  }, [userId, fetchAdventurous]);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1330,15 +1310,20 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
   const [beers, setBeers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const mountedRef = useRef(true);
 
-  const fetchAnti = async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const fetchAnti = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
-      const details = await Promise.all(
-        recommended_ids.map((id) => getBeerDetails(id))
-      );
+      const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
+      if (!mountedRef.current) return;
       setBeers(details.map((beer, i) => ({
         id: beer.beer_id,
         name: beer.beer_name,
@@ -1349,40 +1334,16 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
         image_url: fallbackImage(beer.beer_name),
       })));
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
-        const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
-        if (cancelled) return;
-        setBeers(details.map((beer, i) => ({
-          id: beer.beer_id,
-          name: beer.beer_name,
-          style: beer.beer_style,
-          abv: beer.beer_abv,
-          match_score: scores[i],
-          rating: beer.avg_overall_rating,
-          image_url: fallbackImage(beer.beer_name),
-        })));
-      } catch (err) {
-        if (cancelled) return;
-        setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
+    if (userId) fetchAnti();
+  }, [userId, fetchAnti]);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1453,7 +1414,8 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
   const [apiError, setApiError] = useState(null);
   const [ratingVersion, setRatingVersion] = useState(0);
   const [liveUserId, setLiveUserId] = useState(null);
-  const [coldStartShown, setColdStartShown] = useState(false);
+  const liveUserIdRef = useRef(null);
+  const coldStartShownRef = useRef(false);
   const [partyMembers, setPartyMembers] = useState(['Me']);
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)"];
 
@@ -1466,14 +1428,14 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
         setApiError(null);
         try {
           // 1. Cold-start: show quiz-based recs on first load for a new user.
-          if (coldStartRecs && !coldStartShown) {
+          if (coldStartRecs && !coldStartShownRef.current) {
             const { recommended_ids, scores } = coldStartRecs;
             const scaled = scaleScores(scores);
             const details = await Promise.all(
               recommended_ids.map((id) => getBeerDetails(id))
             );
             if (cancelled) return;
-            setColdStartShown(true);
+            coldStartShownRef.current = true;
             const beers = details.map((beer, i) => mapBeerToCard(beer, scaled[i]));
             setApiData({ swimlanes: [{ id: 'top-matches', title: 'Top Matches for You', beers }] });
             return;
@@ -1503,11 +1465,14 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
           }
 
           // 3. Demo mode with a sample user (unchanged behaviour).
-          let sampleId = liveUserId;
+          let sampleId = liveUserIdRef.current;
           if (!sampleId) {
             const { user_ids } = await getSampleUsers(1);
             sampleId = user_ids[0];
-            if (!cancelled) setLiveUserId(sampleId);
+            if (!cancelled) {
+              liveUserIdRef.current = sampleId;
+              setLiveUserId(sampleId);
+            }
           }
           const { recommended_ids, scores } = await getRecommendations(sampleId, 20);
           const scaled = scaleScores(scores);
@@ -1535,7 +1500,7 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
       fetchLiveData();
       return () => { cancelled = true; };
     }
-  }, [isDemoMode, ratingVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDemoMode, ratingVersion, userId, coldStartRecs]);
 
   const activeData = isDemoMode ? data : apiData;
 
