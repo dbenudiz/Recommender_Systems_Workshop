@@ -4,6 +4,8 @@ import logo from '../assets/logo.png';
 import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
 import { getBeerImage, DEFAULT_BEER_IMAGE } from '../utils/beerImages';
 import NewUserBanner from './NewUserBanner';
+import UserProfilePage from './UserProfilePage';
+import { saveRating as persistRating } from '../services/authService';
 
 const SCALED_MIN = 0.70;
 const SCALED_MAX = 0.97;
@@ -149,7 +151,7 @@ const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }
           {dropdownOpen && (
             <div className="dropdown-menu">
               <button className="dropdown-item" onClick={() => { setActiveTab('home'); setDropdownOpen(false); }}>Home</button>
-              <button className="dropdown-item" onClick={() => setDropdownOpen(false)}>Profile</button>
+              <button className="dropdown-item" onClick={() => { setActiveTab('profile'); setDropdownOpen(false); }}>Profile</button>
               <div className="dropdown-divider"></div>
               <button className="dropdown-item" style={{ color: '#ff4d4d' }} onClick={onLogout}>
                 Logout
@@ -1538,6 +1540,8 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
       [beerId]: { rating, review }
     }));
 
+    if (userId) persistRating(userId, beerId, rating);
+
     if (!isDemoMode) {
       const activeUserId = userId || liveUserId;
       try {
@@ -1653,6 +1657,10 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
             favorites={favorites}
             onToggleFav={toggleFavorite}
           />
+        )}
+
+        {activeTab === 'profile' && (
+          <UserProfilePage userId={userId} />
         )}
       </div>
 

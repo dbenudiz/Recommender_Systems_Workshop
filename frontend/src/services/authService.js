@@ -60,6 +60,43 @@ export const loginUser = (email, password) => {
   return { success: true, user: toPublicUser(normalizedEmail, record) };
 };
 
+export const getUserRecord = (email) => {
+  const users = readUsers();
+  return users[email.trim().toLowerCase()] || null;
+};
+
+export const updateDisplayName = (email, newName) => {
+  const trimmed = newName.trim();
+  if (!trimmed) return { success: false, error: 'Display name cannot be empty.' };
+  const users = readUsers();
+  const record = users[email.trim().toLowerCase()];
+  if (!record) return { success: false, error: 'User not found.' };
+  record.username = trimmed;
+  writeUsers(users);
+  return { success: true };
+};
+
+export const updatePassword = (email, currentPw, newPw) => {
+  const users = readUsers();
+  const record = users[email.trim().toLowerCase()];
+  if (!record || record.password !== currentPw)
+    return { success: false, error: 'Current password is incorrect.' };
+  if (newPw.length < 6)
+    return { success: false, error: 'New password must be at least 6 characters.' };
+  record.password = newPw;
+  writeUsers(users);
+  return { success: true };
+};
+
+export const saveRating = (email, beerId, rating) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const users = readUsers();
+  const record = users[normalizedEmail];
+  if (!record) return;
+  record.ratings = { ...record.ratings, [String(beerId)]: rating };
+  writeUsers(users);
+};
+
 export const saveColdStartRatings = (email, ratings) => {
   const normalizedEmail = email.trim().toLowerCase();
   const users = readUsers();
