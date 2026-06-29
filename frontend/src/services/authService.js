@@ -97,6 +97,31 @@ export const saveRating = (email, beerId, rating) => {
   writeUsers(users);
 };
 
+export const getRegisteredUsers = (currentEmail) => {
+  const users = readUsers();
+  const norm = currentEmail.trim().toLowerCase();
+  return Object.entries(users)
+    .filter(([email]) => email !== norm)
+    .map(([email, rec]) => ({ email, username: rec.username || email }));
+};
+
+export const shareBeerWithUser = (recipientEmail, shareObj) => {
+  const users = readUsers();
+  const record = users[recipientEmail.trim().toLowerCase()];
+  if (!record) return { success: false, error: 'User not found.' };
+  record.sharedWithMe = [...(record.sharedWithMe || []), shareObj];
+  writeUsers(users);
+  return { success: true };
+};
+
+export const markSharesSeen = (email) => {
+  const users = readUsers();
+  const record = users[email.trim().toLowerCase()];
+  if (!record) return;
+  (record.sharedWithMe || []).forEach((s) => { s.seen = true; });
+  writeUsers(users);
+};
+
 export const saveColdStartRatings = (email, ratings) => {
   const normalizedEmail = email.trim().toLowerCase();
   const users = readUsers();

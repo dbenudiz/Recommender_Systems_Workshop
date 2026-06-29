@@ -5,7 +5,8 @@ import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getS
 import { getBeerImage, DEFAULT_BEER_IMAGE } from '../utils/beerImages';
 import NewUserBanner from './NewUserBanner';
 import UserProfilePage from './UserProfilePage';
-import { saveRating as persistRating } from '../services/authService';
+import SharedWithMePage from './SharedWithMePage';
+import { saveRating as persistRating, getUserRecord, getRegisteredUsers, shareBeerWithUser } from '../services/authService';
 
 const SCALED_MIN = 0.70;
 const SCALED_MAX = 0.97;
@@ -62,7 +63,7 @@ const GroupSwitcher = ({ partyMembers, onApplyMembers, friendDatabase }) => {
 };
 
 // 1. Updated Navbar with toggle
-const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }) => {
+const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode, unreadShareCount = 0 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showDiscoverMenu, setShowDiscoverMenu] = useState(false);
 
@@ -125,7 +126,24 @@ const Navbar = ({ onLogout, activeTab, setActiveTab, isDemoMode, setIsDemoMode }
         <button className={`nav-link ${activeTab === 'favorites' ? 'active' : ''}`} onClick={() => setActiveTab('favorites')}>Favorites</button>
         
         {/* 3. Shared With Me */}
-        <button className="nav-link">Shared With Me</button>
+        <button
+          className={`nav-link ${activeTab === 'shared-with-me' ? 'active' : ''}`}
+          onClick={() => setActiveTab('shared-with-me')}
+          style={{ position: 'relative' }}
+        >
+          Shared With Me
+          {unreadShareCount > 0 && (
+            <span style={{
+              position: 'absolute', top: '-4px', right: '-10px',
+              backgroundColor: '#E67E22', color: '#fff',
+              fontSize: '0.65rem', fontWeight: 'bold',
+              width: '16px', height: '16px', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {unreadShareCount > 9 ? '9+' : unreadShareCount}
+            </span>
+          )}
+        </button>
 
         {/* Demo Toggle Switch */}
         <div className="demo-toggle-container">
@@ -179,10 +197,15 @@ export const BottleIcon = ({ filled, onMouseEnter, onMouseLeave, onClick }) => (
 );
 
 // --- Modal Component with Review System ---
-const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick }) => {
+const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick, userId, onShareSent }) => {
   const [hoverRating, setHoverRating] = useState(0);
   const [rating, setRating] = useState(userRatingData?.rating || 0);
   const [review, setReview] = useState(userRatingData?.review || '');
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareRecipient, setShareRecipient] = useState('');
+  const [shareNote, setShareNote] = useState('');
+  const [shareStatus, setShareStatus] = useState(null); // null | 'sent' | 'error'
+  const registeredUsers = userId ? getRegisteredUsers(userId) : [];
   const [similarBeers, setSimilarBeers] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
 
@@ -217,7 +240,32 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick 
 
   const handleSubmit = () => {
     onSubmitReview(beer.id, rating, review);
-    onClose(); 
+    onClose();
+  };
+
+  const handleShare = () => {
+    if (!shareRecipient) return;
+    const result = shareBeerWithUser(shareRecipient, {
+      id: crypto.randomUUID(),
+      beerId: beer.id,
+      beerName: beer.name,
+      beerStyle: beer.style,
+      beerAbv: beer.abv,
+      beerImage: beer.image_url,
+      sharedByEmail: userId,
+      sharedByName: getUserRecord(userId)?.username || userId,
+      note: shareNote.trim(),
+      sharedAt: Date.now(),
+      seen: false,
+    });
+    if (result.success) {
+      setShareStatus('sent');
+      setShareNote('');
+      setShareRecipient('');
+      onShareSent?.();
+    } else {
+      setShareStatus('error');
+    }
   };
 
   return (
@@ -243,6 +291,51 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick 
           </div>
 
           <div className="beer-meta" style={{ marginTop: '0.3rem' }}>{beer.style} • {beer.abv}% ABV</div>
+
+          {/* Share toggle */}
+          {userId && registeredUsers.length > 0 && (
+            <div style={{ marginTop: '0.6rem' }}>
+              <button
+                onClick={() => { setShareOpen(o => !o); setShareStatus(null); }}
+                style={{ background: 'none', border: 'none', color: '#E67E22', fontSize: '0.85rem', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
+              >
+                {shareOpen ? '✕ Cancel' : '↗ Share this beer'}
+              </button>
+
+              {shareOpen && (
+                <div style={{ marginTop: '0.6rem', backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <select
+                    value={shareRecipient}
+                    onChange={(e) => { setShareRecipient(e.target.value); setShareStatus(null); }}
+                    style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '6px', color: shareRecipient ? '#fff' : '#888', padding: '0.5rem 0.6rem', fontSize: '0.88rem' }}
+                  >
+                    <option value="">Select a friend…</option>
+                    {registeredUsers.map((u) => (
+                      <option key={u.email} value={u.email}>{u.username}</option>
+                    ))}
+                  </select>
+                  <textarea
+                    placeholder="Add a note (optional)"
+                    value={shareNote}
+                    onChange={(e) => setShareNote(e.target.value.slice(0, 200))}
+                    maxLength={200}
+                    rows={2}
+                    style={{ backgroundColor: '#141414', border: '1px solid #333', borderRadius: '6px', color: '#fff', padding: '0.5rem 0.6rem', fontSize: '0.88rem', resize: 'none', outline: 'none' }}
+                  />
+                  {shareStatus === 'sent' && <p style={{ margin: 0, color: '#2ecc71', fontSize: '0.82rem' }}>Sent!</p>}
+                  {shareStatus === 'error' && <p style={{ margin: 0, color: '#e74c3c', fontSize: '0.82rem' }}>Could not send — user not found.</p>}
+                  <button
+                    onClick={handleShare}
+                    disabled={!shareRecipient}
+                    style={{ backgroundColor: shareRecipient ? '#E67E22' : '#333', color: shareRecipient ? '#fff' : '#666', border: 'none', borderRadius: '6px', padding: '0.5rem 1.2rem', fontWeight: 'bold', fontSize: '0.88rem', cursor: shareRecipient ? 'pointer' : 'not-allowed', alignSelf: 'flex-start' }}
+                  >
+                    Send
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="modal-divider"></div>
           
           <h3>Why it's a match</h3>
@@ -1424,6 +1517,13 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
   const coldStartShownRef = useRef(false);
   const [partyMembers, setPartyMembers] = useState(['Me']);
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)"];
+  const [shareVersion, setShareVersion] = useState(0);
+
+  const unreadShareCount = useMemo(() => {
+    if (!userId) return 0;
+    const record = getUserRecord(userId);
+    return (record?.sharedWithMe || []).filter((s) => !s.seen).length;
+  }, [userId, shareVersion]);
 
   useEffect(() => {
     if (!isDemoMode) {
@@ -1571,12 +1671,13 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
 
   return (
     <div style={{ backgroundColor: '#141414', minHeight: '100vh', paddingBottom: '4rem' }}>
-      <Navbar 
-        onLogout={onLogout} 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+      <Navbar
+        onLogout={onLogout}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         isDemoMode={isDemoMode}
         setIsDemoMode={setIsDemoMode}
+        unreadShareCount={unreadShareCount}
       />
       
       <div style={{ padding: '1rem 3rem', display: 'flex', justifyContent: 'flex-end' }}>
@@ -1662,6 +1763,20 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
         {activeTab === 'profile' && (
           <UserProfilePage userId={userId} />
         )}
+
+        {activeTab === 'shared-with-me' && (
+          <SharedWithMePage
+            userId={userId}
+            onBeerClick={async (beerId) => {
+              try {
+                const details = await getBeerDetails(beerId);
+                setSelectedBeer(mapBeerToCard(details, 0));
+              } catch {
+                // beer details unavailable — silently skip
+              }
+            }}
+          />
+        )}
       </div>
 
       <BeerModal
@@ -1670,6 +1785,8 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser
         userRatingData={selectedBeer ? userRatings[selectedBeer.id] : null}
         onSubmitReview={handleSubmitReview}
         onCardClick={(beer) => setSelectedBeer(beer)}
+        userId={userId}
+        onShareSent={() => setShareVersion((v) => v + 1)}
       />
     </div>
   );
