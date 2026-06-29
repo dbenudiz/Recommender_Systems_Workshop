@@ -1766,7 +1766,11 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
         )}
 
         {activeTab === 'profile' && (
-          <UserProfilePage userId={userId} />
+          <UserProfilePage
+            userId={userId}
+            userRatings={userRatings}
+            allUniqueBeers={allUniqueBeers}
+          />
         )}
 
         {activeTab === 'shared-with-me' && (
