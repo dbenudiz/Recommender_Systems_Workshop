@@ -1082,7 +1082,7 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
   const [draftFilters, setDraftFilters] = useState({ ...filterDefaults });
   const [appliedFilters, setAppliedFilters] = useState({});
 
-  const dummyCategories = ["IPA", "Stout", "Lager", "Pilsner", "Ale", "Porter"];
+  const ALL_CATEGORIES = ["IPA", "Stout", "Lager", "Pilsner", "Ale", "Porter"];
 
   // Maps each UI tag to the substrings that can appear in real dataset style names.
   // "IPA" must cover "India Pale Ale" because that's how the BeerAdvocate dataset
@@ -1095,6 +1095,15 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
     Ale:     ['ale'],
     Porter:  ['porter'],
   };
+
+  // Only show tags that actually have matching beers in the current pool.
+  const availableCategories = ALL_CATEGORIES.filter(tag => {
+    const patterns = STYLE_PATTERNS[tag] || [tag.toLowerCase()];
+    return allBeers.some(beer => {
+      const style = (beer.style || '').toLowerCase();
+      return patterns.some(p => style.includes(p));
+    });
+  });
 
   const handleTagClick = (category) => {
     if (activeTags.includes(category)) {
@@ -1167,8 +1176,8 @@ const DiscoverPage = ({ allBeers, favorites, onCardClick, onToggleFav }) => {
         </div>
         
         <div className="tags-container">
-          {dummyCategories.map(category => (
-            <button 
+          {availableCategories.map(category => (
+            <button
               key={category}
               className={`category-tag ${activeTags.includes(category) ? 'active' : ''}`}
               onClick={() => handleTagClick(category)}
