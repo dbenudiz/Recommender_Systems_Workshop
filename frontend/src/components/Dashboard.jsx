@@ -3,6 +3,7 @@ import './Dashboard.css';
 import logo from '../assets/logo.png';
 import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
 import { getBeerImage, DEFAULT_BEER_IMAGE } from '../utils/beerImages';
+import NewUserBanner from './NewUserBanner';
 
 const SCALED_MIN = 0.70;
 const SCALED_MAX = 0.97;
@@ -1406,7 +1407,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
 };
 
 // 3. Main Dashboard Component
-const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
+const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId, isNewUser = false, onNewUserDismiss }) => {
   const [selectedBeer, setSelectedBeer] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [userRatings, setUserRatings] = useState({});
@@ -1590,6 +1591,9 @@ const RecommenderDashboard = ({ data, onLogout, coldStartRecs, userId }) => {
           <>
             {activeTab === 'home' && (
               <>
+                {isNewUser && (
+                  <NewUserBanner onDismiss={onNewUserDismiss} />
+                )}
                 {displaySwimlanes.map((lane) => (
                   <Swimlane
                     key={`${lane.id}-${partyMembers.join(',')}`}

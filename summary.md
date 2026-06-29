@@ -45,7 +45,7 @@ Both JSON files are ingested via `data_processing/process_json.py` into PostgreS
 - **Content-Based (TF-IDF + cosine similarity)** — represents each beer as a feature vector and finds similar beers based on style, brewery, and text. Updates continuously as the user rates beers.
 - **Hybrid blending** — CF and CB scores are linearly blended for the main recommendation feed.
 - **MMR re-ranking** — Maximal Marginal Relevance applied to the hybrid scores to promote diversity in the recommendations.
-- **Cold-start (cluster-based CB)** — new users complete a 10-beer quiz; answers are mapped to four style clusters (`hoppy`, `dark`, `sour`, `light`) and used to generate initial CB recommendations instantly.
+- **Cold-start (two-method onboarding)** — new users choose between Method 1 (search for known beers and rate them 1–5; minimum 3 ratings required) or Method 2 (rate the importance of taste/aroma/appearance/palate, pick an ABV preference, and select beer styles). Method 1 uses CB always and adds CF fold-in once ≥ 3 ratings are collected; Method 2 maps aspect importance levels to quantile targets in the numeric feature sub-space and blends with a style-cluster prior. Both produce a `pd.Series` of beer scores compatible with the hybrid pipeline downstream.
 
 &nbsp;<br>
 
@@ -75,7 +75,7 @@ The system has three main layers: a React frontend, a FastAPI backend, and a pai
 - **Milestone 3:** Added TF-IDF content-based pipeline 
 - **Milestone 4:** Created React based frontend for app using dummy data
 - **Milestone 5:** Built FastAPI backend with hybrid recommendation endpoint; 
-- **Milestone 6:** Created cold-start quiz flow with matching backend endpoint.
+- **Milestone 6:** Created cold-start onboarding with two methods: beer-search-and-rate (Method 1, primary) and aspect-importance sliders with style chips (Method 2, fallback). New backend endpoints: `GET /beers/search`, `POST /onboarding/from-attributes`, `POST /onboarding/hybrid`.
 - **Milestone 7:** Improved React + Vite frontend Favorites, Discover, Top 50, and Adventurous tabs; added support for using real data and Demo Data toggle for standalone exploration.
 - **Milestone 8:** Added MMR re-ranking for diversity, group recommendations endpoint, and CF weight tuning sweep.
 - **Milestone 9:** Added real-time feedback loop: immediate exclusion of rated beers, heuristic score adjustments, and SVD fold-in for live recommendation updates without retraining.
@@ -91,7 +91,7 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 ## Main Features
 
 - **Personalised recommendation feed** — hybrid CF + CB swimlanes ("Top Matches", "You Might Also Like") on the Home tab, MMR-reranked for diversity.
-- **Cold-start onboarding** — new users rate 10 beers in a quiz; recommendations are available immediately, before any in-app interactions.
+- **Cold-start onboarding** — new users choose between two methods: search for beers they know and rate them (Method 1, recommended, minimum 3 ratings), or rate the importance of taste/aroma/appearance/palate and select preferred styles (Method 2, guided fallback). Recommendations are available immediately after onboarding, before any further in-app interactions.
 - **Real-time feedback loop** — rating a beer instantly removes it from feeds, applies score adjustments to similar beers, and triggers SVD fold-in so recommendations update live without retraining.
 - **Adventurous tab** — surfaces mid-range picks (positions 50–200 of the user's predicted ranking) that diverge from core taste, with a "Surprise Me Again" re-roll button.
 - **Top 50 tab** — community leaderboard sorted by average overall rating across all users.

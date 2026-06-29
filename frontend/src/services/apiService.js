@@ -34,20 +34,6 @@ export async function getGroupRecommendations(groupIds, recNum = 10) {
   return request(`/recommendations/group?group=${encodeURIComponent(group)}&rec_num=${recNum}`);
 }
 
-// GET /quiz
-export async function getQuiz() {
-  return request('/quiz');
-}
-
-// POST /recommendations/cold-start
-export async function getColdStartRecommendations(answers) {
-  return request('/recommendations/cold-start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ answers }),
-  });
-}
-
 // GET /users/sample?n={n}
 export async function getSampleUsers(n = 5) {
   return request(`/users/sample?n=${n}`);
@@ -74,5 +60,41 @@ export async function submitRating(userId, beerId, rating) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, beer_id: beerId, rating }),
+  });
+}
+
+// GET /beers/search?q=query&limit=20
+// Returns: { results: [{beer_id, beer_name, beer_style, beer_abv, avg_overall_rating}], total_matches, showing }
+export async function searchBeers(query) {
+  return request(`/beers/search?q=${encodeURIComponent(query)}`);
+}
+
+// POST each beer rating individually (parallel) — used for Method 1 cold-start
+// ratingsDict: Record<beerId, 1|2|3|4|5>
+export async function submitColdStartBeerRatings(userId, ratingsDict) {
+  return Promise.all(
+    Object.entries(ratingsDict).map(([beerId, rating]) =>
+      submitRating(userId, beerId, rating)
+    )
+  );
+}
+
+// POST /onboarding/from-attributes — Method 2 cold-start
+// payload: { taste, aroma, appearance, palate, abv_pref, styles, n }
+export async function submitAttributesColdStart(payload) {
+  return request('/onboarding/from-attributes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// POST /onboarding/hybrid — M1 + M2 combined cold-start
+// payload: { rated_beers, attributes, n }
+export async function submitHybridColdStart(payload) {
+  return request('/onboarding/hybrid', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }

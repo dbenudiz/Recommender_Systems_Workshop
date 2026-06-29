@@ -3,9 +3,9 @@
 ## User Interface
 
 - **Technology:** React + Vite
-- **Responsibilities:** Display the beer recommendation dashboard; collect user interactions (ratings, quiz answers, search/filter inputs); manage local state for Favorites and rated beers; toggle between Demo Data and live backend mode.
+- **Responsibilities:** Display the beer recommendation dashboard; collect user interactions (ratings, onboarding inputs, search/filter inputs); manage local state for Favorites and rated beers; toggle between Demo Data and live backend mode.
 - **Interactions:**
-  - Calls backend APIs via `src/services/apiService.js` (e.g. `/recommendations/{user_id}`, `/beers/top`, `/quiz`, `/ratings`).
+  - Calls backend APIs via `src/services/apiService.js` (e.g. `/recommendations/{user_id}`, `/beers/top`, `/beers/search`, `/onboarding/from-attributes`, `/ratings`).
   - Receives JSON responses from the backend and renders beer cards, match badges, and swimlanes.
 - **More info:** Ships with bundled sample beers so the UI can be previewed without the backend running (Demo Data toggle). Dynamically fetches a valid user ID from `GET /users/sample` when switching to live mode — no hardcoded IDs.
 - **Source code:** [`/frontend/src/`](./frontend/src/)
@@ -35,13 +35,14 @@
 
 ## Cold-Start Module
 
-- **Technology:** Item profiles CSV, cluster-based scoring
-- **Responsibilities:** Generates initial recommendations for new users based on their onboarding quiz answers, before any in-app interactions.
+- **Technology:** Item profiles CSV, CB pipeline, CF fold-in (SVD)
+- **Responsibilities:** Generates initial recommendations for new users via two methods before any in-app interaction history exists.
 - **Interactions:**
-  - Reads `data/item_profiles_for_cold_start.csv` (produced by `data_processing/pipeline.py`).
-  - Receives cluster scores (`hoppy`, `dark`, `sour`, `light`) posted by the frontend to `POST /recommendations/cold-start`.
-  - Returns a ranked list of beers to the API server.
-- **More info:** The frontend maps the 10-beer quiz ratings to the four clusters and posts average cluster scores. Recommendations are available immediately after quiz submission.
+  - Reads item profiles from the CB pipeline (`cb.item_profiles`, `cb.beer_feature_matrix`).
+  - **Method 1** (`cold_start_from_ratings`): receives a dict of `{beer_id: rating}` collected by the frontend; builds a CB user profile and, if ≥ 3 beers are rated, folds the new user into the CF latent space. CF weight scales linearly from 0 → 0.6 as ratings grow from 3 → 5.
+  - **Method 2** (`cold_start_from_attributes`): receives aspect importance scores (taste/aroma/appearance/palate 1–5), ABV preference, and style chips; maps importance levels to quantile targets in the 8-column numeric sub-space of the beer feature matrix and blends 70% numeric similarity + 30% style-cluster prior.
+  - Exposes `POST /onboarding/from-attributes` (Method 2) and `POST /onboarding/hybrid` (combined) in the API server; Method 1 ratings are submitted individually via `POST /ratings`.
+- **More info:** Both functions return a `pd.Series` (index = beer_id, values = score) compatible with the hybrid pipeline. `GET /beers/search` (declared before `/beers/{beer_id}` to avoid path collision) supports the Method 1 beer search UI.
 - **Source code:** [`/cold_start.py`](./cold_start.py)
 
 ## Real-Time Online Store
