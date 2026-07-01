@@ -98,3 +98,20 @@ export async function submitHybridColdStart(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+// POST /recommendations/menu-upload (multipart/form-data)
+// Returns: { recommended_ids, scores, matched_count, total_extracted }
+export async function uploadMenuImage(userId, imageFile, recNum = 10) {
+  const formData = new FormData();
+  formData.append('user_id', userId);
+  formData.append('image', imageFile);
+  formData.append('rec_num', recNum);
+  const response = await fetch(`${API_BASE}/recommendations/menu-upload`, {
+    method: 'POST',
+    body: formData,  // no Content-Type header — let browser set multipart boundary
+  });
+  if (!response.ok) {
+    throw new Error(`Menu upload failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}

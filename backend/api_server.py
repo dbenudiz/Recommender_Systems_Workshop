@@ -1,13 +1,15 @@
 import logging
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 import cf_pipeline as cf
 import cb_pipeline as cb
 import cold_start
 import pandas as pd
 import numpy as np
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -16,6 +18,8 @@ from backend.online_store import (
     record_rating_value, get_user_ratings,
 )
 
+import menu_vision
+import menu_matcher
 
 NEW_RATINGS_PATH = Path(__file__).resolve().parent.parent / "new_ratings.csv"
 
@@ -119,6 +123,122 @@ async def get_group_recommend(group: str = "", rec_num: int = DEFAULT_RECOMMENDA
             "recommended_ids": final_recommendations.index.tolist(),
             "scores": final_recommendations.values.tolist()
         }
+
+@app.post("/recommendations/menu-upload")
+async def get_menu_recommendations(
+    user_id: str = Form(...),
+    image: UploadFile = File(...),
+    rec_num: int = Form(DEFAULT_RECOMMENDATION_NUM),
+):
+    """
+    Accept a menu image, extract beer names via vision AI, fuzzy-match against
+    the catalog, then return recommendations filtered to those beers only.
+    """
+    image_bytes = await image.read()
+
+    # Step 1: extract beer names from the image
+    extracted = menu_vision.extract_beers_from_image(image_bytes)
+    logger.warning("Menu scan: Gemini extracted %d beer(s): %s", len(extracted), [e.get("name") for e in extracted])
+
+    # Step 2: fuzzy-match against beers that have CB feature vectors.
+    # beer_id_to_index may have str keys even when item_profiles["beer_id"] is int64
+    # (train_models.py saves them with astype(str)).  Build a str→index map so the
+    # isin() check and later matrix slices work regardless of the key type.
+    cb_str_to_index = {str(k): v for k, v in cb.beer_id_to_index.items()}
+    recommendable_profiles = cb.item_profiles[
+        cb.item_profiles["beer_id"].astype(str).isin(cb_str_to_index)
+    ]
+    logger.warning(
+        "Menu scan: catalog size — item_profiles=%d  beer_id_to_index=%d  recommendable=%d",
+        len(cb.item_profiles), len(cb.beer_id_to_index), len(recommendable_profiles),
+    )
+    matched_ids, total_extracted = menu_matcher.match_menu_beers(
+        extracted, recommendable_profiles
+    )
+    logger.warning("Menu scan: matched %d/%d beers to catalog", len(matched_ids), total_extracted)
+
+    if not matched_ids:
+        return {
+            "recommended_ids": [],
+            "scores": [],
+            "matched_count": 0,
+            "total_extracted": total_extracted,
+        }
+
+    # matched_ids come from item_profiles["beer_id"] (native dtype).
+    # Use cb_str_to_index (str keys) for the matrix slice so there is no type mismatch.
+    matched_cb_indices = [cb_str_to_index[str(bid)] for bid in matched_ids]
+    matched_features = cb.beer_feature_matrix[matched_cb_indices]
+
+    # For pd.Series indices, keep native item_profiles dtype via the existing cast helper.
+    col = cb.item_profiles["beer_id"]
+    def _cast(bid):
+        if col.dtype != object:
+            try:
+                return col.dtype.type(bid)
+            except (ValueError, TypeError):
+                return bid
+        return bid
+    cast_ids = [_cast(bid) for bid in matched_ids]
+
+    cb_scores = None
+    try:
+        user_profile = cb.build_user_profile(user_id)
+        sims = cosine_similarity(user_profile, matched_features).flatten()
+        cb_scores = pd.Series(sims, index=cast_ids)
+    except ValueError:
+        pass
+
+    cf_scores = None
+    if user_id in cf.user_id_to_index:
+        try:
+            user_idx = cf.user_id_to_index[user_id]
+            cf_indices = [cf.beer_id_to_index[bid] for bid in cast_ids if bid in cf.beer_id_to_index]
+            cf_ids    = [bid                        for bid in cast_ids if bid in cf.beer_id_to_index]
+            if cf_indices:
+                raw = cf.U[user_idx] @ cf.V[cf_indices].T + cf.user_means[user_idx]
+                cf_scores = pd.Series(np.clip(raw, 0.0, 1.0), index=cf_ids)
+        except Exception:
+            pass
+
+    session_ratings = get_user_ratings(user_id)
+    historical_count = (
+        cf.R_sparse.getrow(cf.user_id_to_index[user_id]).nnz
+        if user_id in cf.user_id_to_index else 0
+    )
+    cf_weight = get_cf_weight(historical_count + len(session_ratings))
+
+    if cf_scores is not None and cb_scores is not None:
+        blended = hybrid_scores(cf_scores, cb_scores, cf_weight)
+    elif cf_scores is not None:
+        blended = cf_scores
+    elif cb_scores is not None:
+        blended = cb_scores
+    else:
+        # Unknown user: rank matched beers by popularity
+        pop = recommendable_profiles[recommendable_profiles["beer_id"].isin(cast_ids)].copy()
+        pop = pop.set_index("beer_id")["avg_overall_rating"].fillna(0.0)
+        pop.index = pop.index.map(_cast)
+        blended = pop / pop.max() if pop.max() > 0 else pop
+
+    # Exclude beers already rated this session
+    exclude = get_excluded_ids(user_id)
+    blended = blended[~blended.index.isin(exclude)]
+
+    if blended.empty:
+        return {"recommended_ids": [], "scores": [], "matched_count": len(cast_ids), "total_extracted": total_extracted}
+
+    # Sort by score descending — no MMR here since the pool is already small
+    # (only beers from the physical menu) and we want strict best-first ordering.
+    final = blended.nlargest(min(rec_num, len(blended)))
+
+    return {
+        "recommended_ids": final.index.tolist(),
+        "scores": final.values.tolist(),
+        "matched_count": len(cast_ids),
+        "total_extracted": total_extracted,
+    }
+
 
 @app.get("/recommendations/{user_id}")
 async def get_recommendation(user_id: str, rec_num: int = DEFAULT_RECOMMENDATION_NUM):
@@ -654,12 +774,12 @@ def get_group_candidates(group_ids: list, candidate_num: int, penalty_weight: fl
 def rerank_recommendations(candidates: pd.Series, rec_num: int, diversity_weight: float = STANDARD_LAMBDA):
     """
     Selects top rec_num beers using Maximal Marginal Relevance (MMR) for reranking.
-    
+
     Parameters:
     - candidates: pd.Series where index is the beer id and value is the recommendation score [0, 1].
     - rec_num: int, the number of final recommendations desired.
     - diversity_weight: float [0, 1], the lambda parameter balancing relevance (1) and diversity (0).
-    
+
     Returns:
     - series of selected beer ids and their scores.
     """
@@ -683,11 +803,11 @@ def rerank_recommendations(candidates: pd.Series, rec_num: int, diversity_weight
     while len(selected) < rec_num:
         best_mmr_score = -float('inf')
         best_candidate = None
-        
+
         # Extract features for all currently selected items
         selected_indices = [cb.beer_id_to_index[b] for b in selected]
         selected_feats = cb.beer_feature_matrix[selected_indices]  # Shape: (len(selected), num_features)
-        
+
         # Extract features for all remaining unselected items
         unselected_indices = [cb.beer_id_to_index[b] for b in unselected]
         unselected_feats = cb.beer_feature_matrix[unselected_indices]  # Shape: (len(unselected), num_features)

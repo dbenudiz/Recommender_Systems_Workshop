@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
-import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations } from '../services/apiService';
+import { getRecommendations, getBeerDetails, getSimilarBeers, submitRating, getSampleUsers, getTopBeers, getAdventurousRecommendations, getAntiRecommendations, uploadMenuImage } from '../services/apiService';
 import { getBeerImage, DEFAULT_BEER_IMAGE } from '../utils/beerImages';
 import NewUserBanner from './NewUserBanner';
 import UserProfilePage from './UserProfilePage';
 import SharedWithMePage from './SharedWithMePage';
 import { saveRating as persistRating, getUserRecord, getRegisteredUsers, shareBeerWithUser } from '../services/authService';
+import MenuUpload from './MenuUpload';
 
 const SCALED_MIN = 0.70;
 const SCALED_MAX = 0.97;
@@ -1536,6 +1537,9 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
     return (record?.sharedWithMe || []).filter((s) => !s.seen).length;
   }, [userId, shareVersion]);
 
+  const [showMenuUpload, setShowMenuUpload] = useState(false);
+  const [menuResults, setMenuResults] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1676,6 +1680,23 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
     setFavorites(prev => prev.includes(beerId) ? prev.filter(id => id !== beerId) : [...prev, beerId]);
   };
 
+  const handleMenuResults = async (data) => {
+    try {
+      const { recommended_ids, scores, matched_count, total_extracted } = data;
+      const scaled = scaleScores(scores);
+      // Sort descending by score so best matches appear first
+      const indexed = recommended_ids.map((id, i) => ({ id, score: scaled[i] }));
+      indexed.sort((a, b) => b.score - a.score);
+      const results = await Promise.allSettled(indexed.map(({ id }) => getBeerDetails(id)));
+      const beers = results
+        .map((r, i) => r.status === 'fulfilled' && r.value ? mapBeerToCard(r.value, indexed[i].score) : null)
+        .filter(Boolean);
+      setMenuResults({ beers, matched_count, total_extracted });
+    } catch {
+      setMenuResults(null);
+    }
+  };
+
   return (
     <div style={{ backgroundColor: '#141414', minHeight: '100vh', paddingBottom: '4rem' }}>
       <Navbar
@@ -1704,16 +1725,47 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
                 {isNewUser && (
                   <NewUserBanner onDismiss={onNewUserDismiss} />
                 )}
-                {displaySwimlanes.map((lane) => (
-                  <Swimlane
-                    key={`${lane.id}-${partyMembers.join(',')}`}
-                    title={lane.title}
-                    beers={lane.beers.filter(b => !userRatings[b.id])}
-                    onCardClick={(beer) => setSelectedBeer(beer)}
-                    favorites={favorites}
-                    onToggleFav={toggleFavorite}
-                  />
-                ))}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <button
+                    onClick={() => setShowMenuUpload(true)}
+                    style={{ backgroundColor: '#E67E22', color: '#fff', border: 'none', padding: '0.6rem 1.4rem', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}
+                  >
+                    Scan Menu
+                  </button>
+                </div>
+                {menuResults ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', backgroundColor: '#1a1a1a', borderLeft: '4px solid #E67E22', padding: '0.8rem 1.2rem', borderRadius: '0 8px 8px 0' }}>
+                      <span style={{ color: '#fff', fontWeight: 'bold', flex: 1 }}>
+                        Showing {menuResults.matched_count} of {menuResults.total_extracted} beers found on your menu
+                      </span>
+                      <button
+                        onClick={() => setMenuResults(null)}
+                        style={{ background: 'none', border: '1px solid #666', color: '#aaa', padding: '0.3rem 0.8rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <Swimlane
+                      title="Menu Matches"
+                      beers={menuResults.beers}
+                      onCardClick={(beer) => setSelectedBeer(beer)}
+                      favorites={favorites}
+                      onToggleFav={toggleFavorite}
+                    />
+                  </>
+                ) : (
+                  displaySwimlanes.map((lane) => (
+                    <Swimlane
+                      key={`${lane.id}-${partyMembers.join(',')}`}
+                      title={lane.title}
+                      beers={lane.beers.filter(b => !userRatings[b.id])}
+                      onCardClick={(beer) => setSelectedBeer(beer)}
+                      favorites={favorites}
+                      onToggleFav={toggleFavorite}
+                    />
+                  ))
+                )}
               </>
             )}
 
@@ -1797,6 +1849,13 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
         userId={userId}
         onShareSent={() => setShareVersion((v) => v + 1)}
       />
+      {showMenuUpload && (
+        <MenuUpload
+          userId={userId || liveUserId}
+          onClose={() => setShowMenuUpload(false)}
+          onResults={handleMenuResults}
+        />
+      )}
     </div>
   );
 };
