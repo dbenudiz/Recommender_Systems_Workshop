@@ -116,21 +116,6 @@ def _rehydrate_online_store() -> None:
         print(f"WARNING: Failed to rehydrate online_store from {NEW_RATINGS_PATH}: {exc}")
 
 
-# @app.on_event("startup")
-# async def _on_startup():
-#     _rehydrate_online_store()
-
-
-# @app.on_event("startup")
-# async def check_artifacts():
-#     artifacts_dir = Path(__file__).resolve().parent.parent / "artifacts"
-#     if not artifacts_dir.exists():
-#         print("WARNING: artifacts/ directory not found. Pipelines are using on-the-fly computation.")
-#         print("Run 'python train_models.py' to pre-compute model artifacts for faster startup.")
-#     else:
-#         print("artifacts/ directory found. Pipelines loaded pre-computed models.")
-
-
 @app.get("/")
 async def root():
     return {"message": "You shouldn't be here ;)"}
