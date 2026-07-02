@@ -29,7 +29,7 @@ Both JSON files are ingested via `data_processing/process_json.py` into PostgreS
 ### Data Platforms
 
 - **PostgreSQL** — stores the ingested BeerAdvocate and RateBeer review data.
-- **In-memory online store** (`backend/online_store.py`) — holds real-time session ratings and score adjustments; resets on server restart.
+- **In-memory online store** (`backend/online_store.py`) — holds real-time session ratings and score adjustments; ratings and exclusions are rehydrated from `new_ratings.csv` on startup, so a registered user's personalization survives a server restart (heuristic score adjustments are not persisted).
 - **`new_ratings.csv`** — append-only flat file persisting session ratings across restarts for eventual offline retraining.
 
 ### AI
@@ -48,7 +48,7 @@ Both JSON files are ingested via `data_processing/process_json.py` into PostgreS
 - **Hybrid blending** — CF and CB scores are linearly blended for the main recommendation feed. The CF weight is adapted per-user based on rating count: new users get more CB weight (content signal is more reliable with sparse history), while experienced users get more CF weight (collaborative signal improves with more data). Weight ramps linearly from 0.1 (0 ratings) to 0.6 (≥ 50 ratings).
 - **MMR re-ranking** — Maximal Marginal Relevance applied to the hybrid scores to promote diversity in the recommendations.
 - **Menu-scan scoring** — when a user uploads a menu photo, beer names are extracted via Gemini vision and fuzzy-matched to the catalog; only the matched subset (~8–12 beers) is scored by slicing the CB feature matrix and CF latent factors directly, bypassing full 70k-beer scoring entirely. Results are ranked by the user's personal hybrid score.
-- **Cold-start (two-method onboarding)** — new users choose between Method 1 (search for known beers and rate them 1–5; minimum 3 ratings required) or Method 2 (rate the importance of taste/aroma/appearance/palate, pick an ABV preference, and select beer styles). Method 1 uses CB always and adds CF fold-in once ≥ 3 ratings are collected; Method 2 maps aspect importance levels to quantile targets in the numeric feature sub-space and blends with a style-cluster prior. Both produce a `pd.Series` of beer scores compatible with the hybrid pipeline downstream.
+- **Cold-start (two-method onboarding)** — new users choose between Method 1 (search for known beers and rate them 1–5; minimum 3 ratings required) or Method 2 (rate the importance of taste/aroma/appearance/palate, pick an ABV preference, and select beer styles). Method 1 uses CB always and adds CF fold-in once ≥ 3 ratings are collected; Method 2 maps aspect importance levels to quantile targets in the numeric feature sub-space and blends with a style-cluster prior. Both produce a `pd.Series` of beer scores compatible with the hybrid pipeline downstream. Candidate generation for Method 2 and for any new user's ongoing CB-based recommendations caps representation to 5 beers per exact style, preventing one dominant style from filling the entire result set.
 
 &nbsp;<br>
 
@@ -84,6 +84,9 @@ The system has three main layers: a React frontend, a FastAPI backend, and a pai
 - **Milestone 9:** Added real-time feedback loop: immediate exclusion of rated beers, heuristic score adjustments, and SVD fold-in for live recommendation updates without retraining.
 - **Milestone 10:** Added Scan Menu feature — Gemini vision API extracts beer names from uploaded menu photos; rapidfuzz maps them to the catalog; a dedicated endpoint scores only the matched beers by slicing CB/CF matrices directly.
 - **Milestone 11:** Added Rubi's Daily Recommendation — a hero card on the Home tab highlighting a single standout beer pick, guaranteed not to overlap the swimlanes shown below it.
+- **Milestone 12:** Fixed cold-start reliability — registered users now durably get real personalized recommendations for both onboarding methods (previously fell back to an unrelated real user's feed on any 404); Method 2 picks are persisted as ratings; the online store rehydrates from `new_ratings.csv` on startup so personalization survives a backend restart; zero-signal/guest users see an honest "Popular Beers" list instead of a substituted feed.
+- **Milestone 13:** Fixed recommendation diversity — added a per-style candidate cap to cold-start Method 2 and to new-user CB recommendations, preventing a single beer style from dominating the results; extended the anti-recommendations endpoint with the same new-user fallback used by the main recommendation endpoint, fixing a 404 for registered users without trained CF/CB history.
+- **Milestone 14:** Fixed Friend Compatibility — the taste-match comparison now uses the user's full rating history instead of the live (and volatile) recommendation feed, fixing false "not enough shared ratings" results that occurred as soon as the feed refreshed.
 
 &nbsp;<br>
 
@@ -95,8 +98,8 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 
 ## Main Features
 
-- **Personalised recommendation feed** — hybrid CF + CB swimlanes ("Top Matches", "You Might Also Like") on the Home tab, MMR-reranked for diversity.
-- **Cold-start onboarding** — new users choose between two methods: search for beers they know and rate them (Method 1, recommended, minimum 3 ratings), or rate the importance of taste/aroma/appearance/palate and select preferred styles (Method 2, guided fallback). Recommendations are available immediately after onboarding, before any further in-app interactions.
+- **Personalised recommendation feed** — hybrid CF + CB swimlanes ("Top Matches", "You Might Also Like") on the Home tab, MMR-reranked for diversity. Users with no rating signal yet see a clearly-labeled "Popular Beers" list instead — the app never substitutes another user's personalized feed.
+- **Cold-start onboarding** — new users choose between two methods: search for beers they know and rate them (Method 1, recommended, minimum 3 ratings), or rate the importance of taste/aroma/appearance/palate and select preferred styles (Method 2, guided fallback). Recommendations are available immediately after onboarding, before any further in-app interactions. Both methods persist the resulting ratings to the online store, so recommendations stay personalized (and diversified across beer styles) after a page refresh or backend restart.
 - **Real-time feedback loop** — rating a beer instantly removes it from feeds, applies score adjustments to similar beers, and triggers SVD fold-in so recommendations update live without retraining.
 - **Adventurous tab** — surfaces mid-range picks (positions 50–200 of the user's predicted ranking) that diverge from core taste, with a "Surprise Me Again" re-roll button.
 - **Top 50 tab** — community leaderboard sorted by average overall rating across all users.
@@ -105,10 +108,11 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 - **% Match badges** — every beer card displays a personalised hybrid score, a community average rating, or a rank badge depending on the tab.
 - **Scan Menu** — upload a photo of a bar menu; Gemini vision extracts beer names, fuzzy matching maps them to the catalog, and the system returns only those beers ranked by the user's personal taste score. Appears as a "Scan Menu" button on the Home tab.
 - **Rubi's Daily Recommendation** — a highlighted hero card on the Home tab surfacing one standout beer pick, distinct from the "Top Matches" and "You Might Also Like" swimlanes below it. Reuses the existing hybrid recommendation feed (requests one extra beer beyond what's shown in the swimlanes) so the pick never duplicates a beer already visible on the page; clicking it opens the same beer detail modal used elsewhere in the app.
+- **Friend Compatibility** — on the Profile tab, compares a user's ratings against a set of demo friend personas and shows a taste-match percentage plus "Top Shared Favorites". The comparison is based on the user's full rating history rather than whatever's currently in their live recommendation feed, so the result stays stable as recommendations refresh.
 
 ## Open Issues, Limitations, and Future Work
 
-- The in-memory online store resets on server restart; a persistent store (e.g. Redis) would allow session state to survive restarts.
+- Heuristic score adjustments (similar-beer boosts/penalties) still reset on server restart — only ratings/exclusions are rehydrated from `new_ratings.csv`; a persistent store (e.g. Redis) would let the adjustments survive too.
 - The SVD fold-in approach for real-time updates is a heuristic approximation; periodic full retraining using the accumulated `new_ratings.csv` is needed for long-term accuracy.
 - CF fold-in for new users requires ≥ 5 session ratings before activating; users with fewer interactions rely on CB only.
 - The frontend does not yet persist Favorites or rated beers across browser sessions.
