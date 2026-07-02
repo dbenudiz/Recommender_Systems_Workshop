@@ -1,4 +1,4 @@
-![Logo](frontend/src/assets/RuBeer%20Logo.png)
+<img src="frontend/src/assets/RuBeer%20Logo.png" alt="Logo" width="300">
 
 
 # Beer Recommender System
