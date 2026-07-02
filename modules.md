@@ -85,7 +85,7 @@
 - **Interactions:**
   - Called by the `POST /recommendations/menu-upload` endpoint in `backend/api_server.py`.
   - Returns `[]` on any error so the endpoint degrades gracefully without affecting other flows.
-- **More info:** Uses a singleton `genai.Client` initialised from the `GOOGLE_API_KEY` environment variable (must be set in the terminal before starting the server). Tries `gemini-2.5-flash-lite` first; falls back to `gemini-2.5-flash` on 503.
+- **More info:** Uses a singleton `genai.Client` initialised from the `GOOGLE_API_KEY` environment variable, loaded from a `.env` file (see `.env.example`) via `python-dotenv`. Tries `gemini-2.5-flash-lite` first; falls back to `gemini-2.5-flash` on 503.
 - **Source code:** [`/menu_vision.py`](./menu_vision.py)
 
 ## Menu Matcher Module

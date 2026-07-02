@@ -1,9 +1,9 @@
-# pip install google-genai
+# pip install google-genai python-dotenv
 """
 menu_vision.py — Extract beer names and breweries from a menu image via Gemini vision.
 Uses google-genai SDK (not the deprecated google-generativeai package).
 
-Setup: set GOOGLE_API_KEY in the terminal before starting the server.
+Setup: put GOOGLE_API_KEY=your-key in a .env file in the project root (see .env.example).
 Free tier: 500 requests/day on gemini-2.5-flash-lite (aistudio.google.com).
 """
 
@@ -12,8 +12,11 @@ import logging
 import os
 import time
 
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +43,7 @@ def _get_client() -> "genai.Client | None":
     if not api_key:
         logger.warning(
             "GOOGLE_API_KEY is not set — menu scanning is disabled. "
-            "Set it in the terminal before starting the server: "
-            "$env:GOOGLE_API_KEY = 'your-key'"
+            "Copy .env.example to .env and fill in your key."
         )
         return None
     _CLIENT = genai.Client(api_key=api_key)

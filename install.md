@@ -14,7 +14,7 @@ You will need:
 
 2. **Install Python dependencies:**
    ```powershell
-   py -m pip install psycopg2-binary pandas scikit-learn scipy numpy pytest "fastapi[standard]" uvicorn joblib httpx
+   py -m pip install psycopg2-binary pandas scikit-learn scipy numpy pytest "fastapi[standard]" uvicorn joblib httpx google-genai rapidfuzz python-dotenv
    ```
 
 3. **Start the PostgreSQL service and create the database:**
@@ -47,19 +47,25 @@ You will need:
    ```
    Pre-computed artifacts are saved to `artifacts/` and loaded at server startup.
 
-8. **Start the backend:**
+8. **Set the Gemini API key** (required for menu-scanning; get a free key at aistudio.google.com):
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+   Then open `.env` and replace `your-api-key-here` with your real key. `.env` is git-ignored, so it's never committed.
+
+9. **Start the backend:**
    ```powershell
    py -m fastapi dev
    ```
 
-9. **Install frontend dependencies and start the dev server** (in a separate terminal):
-   ```powershell
-   cd frontend
-   npm install
-   npm run dev
-   ```
+10. **Install frontend dependencies and start the dev server** (in a separate terminal):
+    ```powershell
+    cd frontend
+    npm install
+    npm run dev
+    ```
 
-10. Open **http://localhost:5173** in your browser. Toggle "Demo Data" off to see live recommendations.
+11. Open **http://localhost:5173** in your browser. Toggle "Demo Data" off to see live recommendations.
 
 ## Post-install / Verification
 
@@ -88,3 +94,6 @@ You will need:
 | `npm install` fails with peer dependency errors | Install the LTS version of Node.js |
 | `http://localhost:5173` shows blank page | Make sure `npm run dev` is still running |
 | `ModuleNotFoundError: fastapi` / `uvicorn` | Run `py -m pip install fastapi uvicorn` |
+| `ImportError: cannot import name 'genai' from 'google'` | Run `py -m pip install google-genai` |
+| `ModuleNotFoundError: rapidfuzz` | Run `py -m pip install rapidfuzz` |
+| Menu upload returns no beers / Gemini auth error | Set the `GOOGLE_API_KEY` environment variable (see step 8) |
