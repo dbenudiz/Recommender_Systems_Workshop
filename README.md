@@ -1,4 +1,4 @@
-![Logo](frontend/src/assets/RuBeer Logo.png)
+![Logo](frontend/src/assets/RuBeer%20Logo.png)
 
 
 # Beer Recommender System
