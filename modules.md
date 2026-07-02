@@ -7,7 +7,7 @@
 - **Interactions:**
   - Calls backend APIs via `src/services/apiService.js` (e.g. `/recommendations/{user_id}`, `/beers/top`, `/beers/search`, `/onboarding/from-attributes`, `/ratings`, `POST /recommendations/menu-upload`).
   - Receives JSON responses from the backend and renders beer cards, match badges, and swimlanes.
-- **More info:** Ships with bundled sample beers so the UI can be previewed without the backend running (Demo Data toggle). Dynamically fetches a valid user ID from `GET /users/sample` when switching to live mode — no hardcoded IDs.
+- **More info:** Ships with bundled sample beers so the UI can be previewed without the backend running (Demo Data toggle). Registered users get their own recommendations tied to their real user ID; users with no rating signal yet (e.g. skipped onboarding) see an honest "Popular Beers" list instead — the app never substitutes another real user's personalized feed.
 - **Source code:** [`/frontend/src/`](./frontend/src/)
 
 ## Collaborative Filtering Pipeline
@@ -30,7 +30,7 @@
   - Trained offline by `train_models.py`; artifacts saved to `artifacts/`.
   - Loaded at server startup by `backend/api_server.py`.
   - Provides embeddings and similarity scores to the API server for hybrid blending and `/beers/similar/{beer_id}`.
-- **More info:** Updates recommendations continuously as the user rates beers. Falls back to a 5-beer in-memory mini catalog if real CSVs are absent.
+- **More info:** Updates recommendations continuously as the user rates beers. Falls back to a 5-beer in-memory mini catalog if real CSVs are absent. `cb_recommend_from_ratings` (used for any registered user without trained CF/CB history) caps candidates to 5 beers per exact `beer_style` before selecting the top-N, since averaging several rated beers into one profile vector can otherwise concentrate results on a single style. Beer names are HTML-entity-decoded once at load time to clean up scrape artifacts (e.g. `&#40;` → `(`).
 - **Source code:** [`/cb_pipeline.py`](./cb_pipeline.py)
 
 ## Cold-Start Module
@@ -42,7 +42,7 @@
   - **Method 1** (`cold_start_from_ratings`): receives a dict of `{beer_id: rating}` collected by the frontend; builds a CB user profile and, if ≥ 3 beers are rated, folds the new user into the CF latent space. CF weight scales linearly from 0 → 0.6 as ratings grow from 3 → 5.
   - **Method 2** (`cold_start_from_attributes`): receives aspect importance scores (taste/aroma/appearance/palate 1–5), ABV preference, and style chips; maps importance levels to quantile targets in the 8-column numeric sub-space of the beer feature matrix and blends 70% numeric similarity + 30% style-cluster prior.
   - Exposes `POST /onboarding/from-attributes` (Method 2) and `POST /onboarding/hybrid` (combined) in the API server; Method 1 ratings are submitted individually via `POST /ratings`.
-- **More info:** Both functions return a `pd.Series` (index = beer_id, values = score) compatible with the hybrid pipeline. `GET /beers/search` (declared before `/beers/{beer_id}` to avoid path collision) supports the Method 1 beer search UI.
+- **More info:** Both functions return a `pd.Series` (index = beer_id, values = score) compatible with the hybrid pipeline. `cold_start_from_attributes` caps representation to 5 beers per exact `beer_style` before truncating to `n`, so one dominant style (the style-cluster bonus ties several styles together) can't fill the entire candidate pool. `POST /onboarding/from-attributes` persists the top-scored beers as real ratings in the online store when a `user_id` is provided, giving Method 2 users the same durable, restart-proof personalization as Method 1. `GET /beers/search` (declared before `/beers/{beer_id}` to avoid path collision) supports the Method 1 beer search UI.
 - **Source code:** [`/cold_start.py`](./cold_start.py)
 
 ## Real-Time Online Store
@@ -53,7 +53,7 @@
   - Updated by `POST /ratings` in the API server.
   - Consulted by the CF and CB pipelines when generating recommendations.
   - Appends ratings to `new_ratings.csv` for future offline retraining (best-effort, non-blocking).
-- **More info:** State resets on server restart. `new_ratings.csv` persists across restarts and can be merged into training data before the next `train_models.py` run.
+- **More info:** Session ratings and exclusions are rehydrated from `new_ratings.csv` on server startup, so a registered user's personalization survives a restart; heuristic score adjustments (similar-beer boosts/penalties) are not persisted and still reset. `new_ratings.csv` can also be merged into training data before the next `train_models.py` run.
 - **Source code:** [`/backend/online_store.py`](./backend/online_store.py)
 
 ## Data Ingestion Pipeline
@@ -75,7 +75,7 @@
   - Loads CF and CB pipeline artifacts from `artifacts/` at startup.
   - Dispatches to the appropriate pipeline based on the endpoint called.
   - Returns JSON recommendation lists with beer metadata and match scores.
-- **More info:** Hybrid blending uses a per-user adaptive CF weight that ramps linearly from 0.1 (new users, no rating history) to 0.6 (experienced users, ≥ 50 ratings), computed at request time from the user's historical + session rating count. The upper bound `STANDARD_CF_WEIGHT = 0.6` is tunable via `py train_models.py --tune-weights`. Supports development (`fastapi dev`, auto-reload) and production (`fastapi run`) modes. `POST /recommendations/menu-upload` accepts a multipart menu image, orchestrates the vision and matcher modules, and scores only the matched beers without invoking the full recommendation pipeline.
+- **More info:** Hybrid blending uses a per-user adaptive CF weight that ramps linearly from 0.1 (new users, no rating history) to 0.6 (experienced users, ≥ 50 ratings), computed at request time from the user's historical + session rating count. The upper bound `STANDARD_CF_WEIGHT = 0.6` is tunable via `py train_models.py --tune-weights`. Supports development (`fastapi dev`, auto-reload) and production (`fastapi run`) modes. `POST /recommendations/menu-upload` accepts a multipart menu image, orchestrates the vision and matcher modules, and scores only the matched beers without invoking the full recommendation pipeline. The main and anti-recommendation endpoints share the same new-user fallback: a registered user without trained CF/CB history is scored directly from their session ratings instead of 404ing.
 - **Source code:** [`/backend/api_server.py`](./backend/api_server.py)
 
 ## Menu Vision Module
