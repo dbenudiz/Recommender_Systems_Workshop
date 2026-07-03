@@ -8,7 +8,9 @@ import cb_pipeline as cb
 import cold_start
 import pandas as pd
 import numpy as np
-
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
 from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics.pairwise import cosine_similarity
@@ -352,6 +354,71 @@ async def get_anti_recommendations(user_id: str, rec_num: int = DEFAULT_RECOMMEN
         "recommended_ids": anti_candidates.index.tolist(),
         "scores": anti_candidates.values.tolist(),
     }
+
+load_dotenv()  # Load environment variables from .env file
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+@app.post("/api/chat")
+async def chat_with_sivan(payload: dict = Body(...)):
+    """
+    Endpoint to handle incoming chat messages using RAG (Retrieval-Augmented Generation).
+    """
+    user_message = payload.get("message", "")
+    
+    # ---------------------------------------------------------
+    # STEP 1: THE RETRIEVAL (Gathering context from your DB)
+    # ---------------------------------------------------------
+    # For now, let's grab the top 5 highest-rated beers so Sivan has something to talk about.
+    # Later, you can do a regex search on user_message to find specific styles!
+    top_beers_df = cb.item_profiles.nlargest(5, "avg_overall_rating")
+    
+    # Format the dataframe into a readable string for the AI
+    beer_context = ""
+    for _, row in top_beers_df.iterrows():
+        beer_context += f"- {row['beer_name']} (Style: {row['beer_style']}, ABV: {row['beer_abv']}%, Rating: {row.get('avg_overall_rating', 0):.2f})\n"
+
+    # ---------------------------------------------------------
+    # STEP 2: THE SYSTEM PROMPT (Sivan's Persona + Knowledge)
+    # ---------------------------------------------------------
+    system_prompt = f"""
+    You are Sivan, the friendly, knowledgeable AI assistant for the RuBeer recommendation system.
+    
+    [BEER KNOWLEDGE]
+    Here is the current list of top-rated beers you can recommend:
+    {beer_context}
+    
+    [WEBSITE NAVIGATION GUIDE]
+    You also help users navigate the RuBeer platform. If they ask where to find things, use this map of our platform:
+    - Dashboard: The home page showing the top recommended beers for the user or the user and his selected peers, including the rating of these beers, the matching rating (in percentages), and when a beer is clicked, a beer modal pops up with the ability to rate it and add a review.
+    - Navbar: The top navigation bar where users can access different sections of the platform:
+        - Home: The main landing page with general information and top recommendations.
+        - Discover: where users can explore beers by style, ABV, and other attributes, build and access beer lists and see the top-rated beers across the platform, and use the "build a 6 pack" feature to create a personalized selection of beers.
+        - Favorites: where users can view and edit their favorite beers.
+        - Shared with me: where users can see beers that have been shared with them by other users.
+        - profile: where users can view and edit their personal information, password, view their rating history, add/remove friends, and see their compatibility with friends based on beer ratings.
+    - at any time a user can click the 'heart' icon to add a beer to their favorites, and click the 'share' icon to share a beer with friends.
+    - you can log out of the platform by clicking the 'logout' button in the profile section.
+
+    If a user asks about something unrelated to beer or the RuBeer platform, gently steer the conversation back to beer.
+    """
+
+    # ---------------------------------------------------------
+    # STEP 3: THE GENERATION (Calling the LLM)
+    # ---------------------------------------------------------
+    try:
+        # Initialize the model and pass Sivan's persona as the system instruction
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=system_prompt
+        )
+        
+        # Generate the response asynchronously so we don't block the FastAPI server
+        response = await model.generate_content_async(user_message)
+        
+        return {"reply": response.text}
+        
+    except Exception as e:
+        print(f"Gemini Error: {e}")
+        return {"reply": f"I heard you say '{user_message}', but my connection to Gemini is currently down! Tell the devs to check my API key."}
 
 @app.post("/ratings")
 async def submit_rating(payload: dict = Body(...)):
