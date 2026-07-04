@@ -5,6 +5,7 @@
 - **BeerAdvocate** — user beer reviews, [Stanford SNAP / BeerAdvocate dataset](https://cseweb.ucsd.edu//~jmcauley/datasets.html#multi_aspect).
 - **RateBeer** — user beer reviews, [Stanford SNAP / RateBeer dataset](https://cseweb.ucsd.edu//~jmcauley/datasets.html#multi_aspect).
 
+Contain 4,241,024 interactions from 26,774 Users with 70,243 beers
 Both JSON files are ingested via `data_processing/process_json.py` into PostgreSQL, then passed through a feature-engineering and train/val/test split pipeline (`data_processing/pipeline.py`) to produce enriched CSV files used by the recommendation pipelines.
 
 &nbsp;<br>
@@ -103,7 +104,6 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 - **Real-time feedback loop** — rating a beer instantly removes it from feeds, applies score adjustments to similar beers, and triggers SVD fold-in so recommendations update live without retraining.
 - **Adventurous tab** — surfaces mid-range picks (positions 50–200 of the user's predicted ranking) that diverge from core taste, with a "Surprise Me Again" re-roll button.
 - **Top 50 tab** — community leaderboard sorted by average overall rating across all users.
-- **Demo Data toggle** — the frontend ships with bundled sample beers so the UI can be previewed without the backend or database running.
 - **Group recommendations** — `GET /recommendations/group` generates hybrid recommendations for a set of users simultaneously.
 - **% Match badges** — every beer card displays a personalised hybrid score, a community average rating, or a rank badge depending on the tab.
 - **Scan Menu** — upload a photo of a bar menu; Gemini vision extracts beer names, fuzzy matching maps them to the catalog, and the system returns only those beers ranked by the user's personal taste score. Appears as a "Scan Menu" button on the Home tab.
@@ -112,10 +112,9 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 
 ## Open Issues, Limitations, and Future Work
 
-- Heuristic score adjustments (similar-beer boosts/penalties) still reset on server restart — only ratings/exclusions are rehydrated from `new_ratings.csv`; a persistent store (e.g. Redis) would let the adjustments survive too.
-- The SVD fold-in approach for real-time updates is a heuristic approximation; periodic full retraining using the accumulated `new_ratings.csv` is needed for long-term accuracy.
-- CF fold-in for new users requires ≥ 5 session ratings before activating; users with fewer interactions rely on CB only.
-- The frontend does not yet persist Favorites or rated beers across browser sessions.
+- Convert website into app for use on phones
+- Refine and improve LLM based features to achieve higher accuracy
+- Additional social features like inviting friends to a drink or finding users with similar tastes
 
 &nbsp;<br>
 
