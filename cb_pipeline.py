@@ -249,7 +249,7 @@ def build_user_profile(user_id: str):
     return user_profile
 
 
-def cb_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = False) -> pd.Series:
+def cb_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = False, specific: str = None) -> pd.Series:
     """
     Return top-N content-based beer recommendations for a user.
     """
@@ -261,6 +261,10 @@ def cb_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = 
         beer_feature_matrix,
     ).flatten()
 
+    if specific:
+        beer_index = np.where(beer_ids == specific, beer_ids)[0]
+        return similarities[beer_index]
+        
     already_rated = set(train_df[train_df["username"] == user_id]["beer_id"])
 
     candidate_indices = [
