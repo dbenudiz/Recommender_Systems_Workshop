@@ -313,6 +313,44 @@ async def get_recommendation(user_id: str, rec_num: int = DEFAULT_RECOMMENDATION
             "scores": selected_recommendations.values.tolist()
         }
 
+@app.get("/recommendations/{user_id}/beer/{beer_id}")
+async def get_recommendation(user_id: str, beer_id:str):
+    """
+    Return beer compatability score for the user
+
+    Parameters:
+    - user_id: String id of the users we want recommendations for
+    - beer_id: the id of the beer you want a score for
+
+    Returns:
+    - Predicted compatability score
+    """
+
+    try:
+        cf_score = cf.cf_recommend(user_id, specific = beer_id)
+    except ValueError:
+        cf_score = None
+
+    try:
+        cb_score = cb.cb_recommend(user_id, specific = beer_id)
+    except ValueError:
+        cb_score = None
+
+    if cf_score and cb_score:
+        # Compute per-user CF weight: more ratings → more trust in CF signal
+        historical_count = cf.R_sparse.getrow(cf.user_id_to_index[user_id]).nnz if user_id in cf.user_id_to_index else 0
+        cf_weight = get_cf_weight(historical_count)
+
+        beer_score = (cf_weight * cf_score) + ((1 - cf_weight) * cb_score)
+    elif cf_score or cb_score:
+        beer_score = cf_score if cf_score is not None else cb_score
+    else:
+        raise HTTPException(status_code=404, detail="Invalid User or Beer ID")
+
+    return {
+            beer_id: beer_score,
+        }
+
 @app.get("/recommendations/{user_id}/adventurous")
 async def get_adventurous_recommendations(user_id: str, rec_num: int = DEFAULT_RECOMMENDATION_NUM):
     """Return beers from the mid-range of a user's predicted scores — adventurous picks
