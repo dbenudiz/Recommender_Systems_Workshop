@@ -1887,7 +1887,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
   const [activeTab, setActiveTab] = useState('home');
   const [apiData, setApiData] = useState(null);
   const [dailyBeer, setDailyBeer] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [ratingVersion, setRatingVersion] = useState(0);
   const coldStartShownRef = useRef(false);
@@ -2083,6 +2083,12 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
       </div>
 
       <div style={{ padding: '0 3rem' }}>
+        {activeTab === 'home' && isLoading && !activeData && (
+          <div className="empty-state">
+            <h2>Pouring your recommendations...</h2>
+          </div>
+        )}
+
         {activeData && activeData.swimlanes && (
           <>
             {activeTab === 'home' && (
