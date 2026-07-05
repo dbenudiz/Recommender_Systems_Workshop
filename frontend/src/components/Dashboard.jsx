@@ -462,7 +462,7 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick,
 };
 
 // --- BeerCard Component ---
-const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
+const BeerCard = ({ beer, onCardClick, isFav, onToggleFav, matchLabel = 'Match' }) => {
   const matchPercentage = Math.round(beer.match_score * 100);
   
   return (
@@ -488,7 +488,7 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
           
           <div className="card-header-row">
             <div className="match-score" style={{ color: '#E67E22', fontWeight: 'bold' }}>
-              {beer.rank ? `#${beer.rank}` : (matchPercentage > 0 ? `${matchPercentage}% Match` : 'Catalog')}
+              {beer.rank ? `#${beer.rank}` : (matchPercentage > 0 ? `${matchPercentage}% ${matchLabel}` : 'Catalog')}
             </div>
             <div className="card-rating">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#E67E22" stroke="#E67E22" strokeWidth="2"><path d="M10 2v5l-2 3v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-10l-2-3V2z"></path><path d="M10 2h4"></path></svg>
@@ -1795,6 +1795,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
     setError(null);
     try {
       const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
+      const scaled = scaleScores(scores);
       const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
       if (!mountedRef.current) return;
       setBeers(details.map((beer, i) => ({
@@ -1802,7 +1803,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
         name: beer.beer_name,
         style: beer.beer_style,
         abv: beer.beer_abv,
-        match_score: scores[i],
+        match_score: scaled[i],
         rating: beer.avg_overall_rating,
         image_url: getBeerImage(beer.beer_style, beer.beer_id),
       })));
@@ -1867,6 +1868,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
               onCardClick={onCardClick}
               isFav={favorites.some(favId => Number(favId) === Number(beer.id))}
               onToggleFav={onToggleFav}
+              matchLabel="Mismatch"
             />
           </div>
         ))}
