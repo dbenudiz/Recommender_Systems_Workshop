@@ -38,6 +38,7 @@ Both JSON files are ingested via `data_processing/process_json.py` into PostgreS
 - **Sparse SVD (scipy)** — matrix factorisation for collaborative filtering; operates entirely on sparse matrices to handle tens of thousands of users × beers without memory issues.
 - **TF-IDF + cosine similarity (scikit-learn)** — content-based similarity across beer style, brewery, and textual features.
 - **Google Gemini Vision API (`google-genai` SDK)** — extracts beer names and brewery names from uploaded menu photos; uses `gemini-2.5-flash-lite` (primary, 500 req/day free tier) with `gemini-2.5-flash` as fallback.
+- **Google Gemini text API** - Allows users to ask for help with navigating and using the RuBeer website.
 - **rapidfuzz** — fuzzy string matching used to map Gemini-extracted beer names to catalog entries; tolerant of OCR noise, formatting variants, and volume descriptors (e.g. "e 33cl").
 
 &nbsp;<br>
@@ -109,10 +110,12 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 - **Scan Menu** — upload a photo of a bar menu; Gemini vision extracts beer names, fuzzy matching maps them to the catalog, and the system returns only those beers ranked by the user's personal taste score. Appears as a "Scan Menu" button on the Home tab.
 - **Rubi's Daily Recommendation** — a highlighted hero card on the Home tab surfacing one standout beer pick, distinct from the "Top Matches" and "You Might Also Like" swimlanes below it. Reuses the existing hybrid recommendation feed (requests one extra beer beyond what's shown in the swimlanes) so the pick never duplicates a beer already visible on the page; clicking it opens the same beer detail modal used elsewhere in the app.
 - **Friend Compatibility** — on the Profile tab, compares a user's ratings against a set of demo friend personas and shows a taste-match percentage plus "Top Shared Favorites". The comparison is based on the user's full rating history rather than whatever's currently in their live recommendation feed, so the result stays stable as recommendations refresh.
+- **Build a 6 pack** - If the user or group don't want to choose beers themselves, The system can build a ready to order six pack of beers tailored to them.
+- **AI assistant** - Allows users to ask free text questions about Rubeer to help them navigate and utilize the website
 
 ## Open Issues, Limitations, and Future Work
 
-- Convert website into app for use on phones
+- Convert website into app for use on phones for easier use on the go
 - Refine and improve LLM based features to achieve higher accuracy
 - Additional social features like inviting friends to a drink or finding users with similar tastes
 
