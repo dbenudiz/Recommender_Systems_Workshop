@@ -11,16 +11,20 @@ import { saveRating as persistRating, getUserRecord, getRegisteredUsers, shareBe
 import MenuUpload from './MenuUpload';
 import FoodFellas from '../assets/FoodFellas.png';
 
-const SCALED_MIN = 0.70;
-const SCALED_MAX = 0.97;
+// Raw model scores come from two sources with different natural ranges:
+// CF predicted ratings (~[0,1]) and CB cosine similarity (~[-1,1], confirmed negative in
+// practice for cold-start anti-recommendations). -1..1 is a safe shared bound for both.
+const SCORE_FLOOR = -1;
+const SCORE_CEILING = 1;
 
-const scaleScores = (scores) => {
-  if (!scores || scores.length === 0) return scores;
-  const min = Math.min(...scores);
-  const max = Math.max(...scores);
-  if (max === min) return scores.map(() => (SCALED_MIN + SCALED_MAX) / 2);
-  return scores.map(s => SCALED_MIN + ((s - min) / (max - min)) * (SCALED_MAX - SCALED_MIN));
+const toMatchFraction = (rawScore) => {
+  if (rawScore === null || rawScore === undefined || Number.isNaN(rawScore)) return 0;
+  const clamped = Math.min(SCORE_CEILING, Math.max(SCORE_FLOOR, rawScore));
+  return (clamped - SCORE_FLOOR) / (SCORE_CEILING - SCORE_FLOOR);
 };
+
+const toMatchFractions = (rawScores) => (rawScores || []).map(toMatchFraction);
+const toMismatchFractions = (rawScores) => (rawScores || []).map(s => 1 - toMatchFraction(s));
 
 
 const mapBeerToCard = (beer, score) => {
@@ -190,11 +194,8 @@ export const BottleIcon = ({ filled, onMouseEnter, onMouseLeave, onClick }) => (
   </svg>
 );
 
-const normalizeScore = (score) => {
-  if (score === null || score === undefined) return null;
-  const val = score > 1 ? score : score * 100;
-  return Math.round(val);
-};
+const normalizeScore = (score) =>
+  (score === null || score === undefined) ? null : Math.round(toMatchFraction(score) * 100);
 
 const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick, userId, onShareSent }) => {
   // 1. ALL HOOKS DEFINED FIRST (No conditions here)
@@ -309,9 +310,9 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick,
           
           {/* Match Score UI */}
           <div className="match-score" style={{ backgroundColor: '#E67E22', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px', display: 'inline-block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.8rem' }}>
-  {isScoring ? 'Calculating...' : 
-   dynamicScore === -1 ? 'Need more data to match' : 
-   `${dynamicScore}% Match`}
+  {isScoring ? 'Calculating...' :
+   dynamicScore === -1 ? 'Need more data to match' :
+   `${dynamicScore}% ${beer?.matchLabel || 'Match'}`}
 </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
@@ -1703,7 +1704,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
     setError(null);
     try {
       const { recommended_ids, scores } = await getAdventurousRecommendations(userId, 10);
-      const scaled = scaleScores(scores);
+      const scaled = toMatchFractions(scores);
       const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
       if (!mountedRef.current) return;
       setBeers(details.map((beer, i) => ({
@@ -1795,7 +1796,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
     setError(null);
     try {
       const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
-      const scaled = scaleScores(scores);
+      const scaled = toMismatchFractions(scores);
       const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
       if (!mountedRef.current) return;
       setBeers(details.map((beer, i) => ({
@@ -1804,6 +1805,7 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
         style: beer.beer_style,
         abv: beer.beer_abv,
         match_score: scaled[i],
+        matchLabel: 'Mismatch',
         rating: beer.avg_overall_rating,
         image_url: getBeerImage(beer.beer_style, beer.beer_id),
       })));
@@ -1912,7 +1914,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
         // 1. Cold-start: show quiz-based recs on first load for a new user.
         if (coldStartRecs && !coldStartShownRef.current) {
           const { recommended_ids, scores } = coldStartRecs;
-          const scaled = scaleScores(scores);
+          const scaled = toMatchFractions(scores);
           const details = await Promise.all(
             recommended_ids.map((id) => getBeerDetails(id))
           );
@@ -1927,7 +1929,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
         if (userId) {
           try {
             const { recommended_ids, scores } = await getRecommendations(userId, 21);
-            const scaled = scaleScores(scores);
+            const scaled = toMatchFractions(scores);
             const details = await Promise.all(
               recommended_ids.map((id) => getBeerDetails(id))
             );
@@ -2046,7 +2048,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
   const handleMenuResults = async (data) => {
     try {
       const { recommended_ids, scores, matched_count, total_extracted } = data;
-      const scaled = scaleScores(scores);
+      const scaled = toMatchFractions(scores);
       // Sort descending by score so best matches appear first
       const indexed = recommended_ids.map((id, i) => ({ id, score: scaled[i] }));
       indexed.sort((a, b) => b.score - a.score);
