@@ -28,6 +28,7 @@ from pipeline import (
 )
 import cf_pipeline as cf
 import cb_pipeline as cb
+import cold_start
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,6 +278,117 @@ class TestComputeRMSE:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CF PIPELINE — cf_trust_ramp()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCfTrustRamp:
+    """Test the shared CF-trust ramp helper (used by get_cf_weight() in api_server.py
+    and by cold_start.cold_start_from_ratings) that scales trust in CF linearly with
+    rating count."""
+
+    def test_zero_ratings_returns_floor(self):
+        assert cf.cf_trust_ramp(0, full_ratings=5, floor=0.1, ceiling=0.6) == pytest.approx(0.1)
+
+    def test_full_ratings_returns_ceiling(self):
+        assert cf.cf_trust_ramp(5, full_ratings=5, floor=0.1, ceiling=0.6) == pytest.approx(0.6)
+
+    def test_beyond_full_ratings_stays_at_ceiling(self):
+        assert cf.cf_trust_ramp(500, full_ratings=5, floor=0.1, ceiling=0.6) == pytest.approx(0.6)
+
+    def test_midpoint_is_linear_interpolation(self):
+        result = cf.cf_trust_ramp(2.5, full_ratings=5, floor=0.0, ceiling=1.0)
+        assert result == pytest.approx(0.5)
+
+    def test_default_floor_and_ceiling_are_zero_and_one(self):
+        assert cf.cf_trust_ramp(0, full_ratings=5) == pytest.approx(0.0)
+        assert cf.cf_trust_ramp(5, full_ratings=5) == pytest.approx(1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CF PIPELINE — cf_recommend_new_user()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCfRecommendNewUser:
+    """Test the SVD fold-in path for a brand-new user scored purely from session
+    ratings (no training history)."""
+
+    @pytest.fixture(autouse=True)
+    def _rated_beers(self):
+        sample = list(cf.beer_ids[:5])
+        self.rated_beers = dict(zip(sample, [5.0, 4.0, 5.0, 2.0, 3.0]))
+
+    def test_returns_series(self):
+        result = cf.cf_recommend_new_user(self.rated_beers, n=10)
+        assert isinstance(result, pd.Series)
+
+    def test_returns_at_most_n_items(self):
+        result = cf.cf_recommend_new_user(self.rated_beers, n=5)
+        assert len(result) <= 5
+
+    def test_excludes_rated_beers_from_results(self):
+        result = cf.cf_recommend_new_user(self.rated_beers, n=50)
+        assert set(result.index).isdisjoint(set(self.rated_beers))
+
+    def test_scores_sorted_descending_by_default(self):
+        result = cf.cf_recommend_new_user(self.rated_beers, n=10)
+        assert list(result.values) == sorted(result.values, reverse=True)
+
+    def test_ascending_returns_disjoint_worst_matches(self):
+        best = cf.cf_recommend_new_user(self.rated_beers, n=10, ascending=False)
+        worst = cf.cf_recommend_new_user(self.rated_beers, n=10, ascending=True)
+        assert list(worst.values) == sorted(worst.values)
+        assert set(best.index).isdisjoint(set(worst.index))
+
+    def test_specific_returns_scalar_matching_full_ranking(self):
+        target = list(cf.beer_ids[100:101])[0]
+        full = cf.cf_recommend_new_user(self.rated_beers, n=len(cf.beer_ids))
+        specific_score = cf.cf_recommend_new_user(self.rated_beers, specific=target)
+        assert isinstance(specific_score, (float, np.floating))
+        assert specific_score == pytest.approx(full[target])
+
+    def test_raises_value_error_when_no_rated_beers_in_catalog(self):
+        with pytest.raises(ValueError, match="in the CF catalog"):
+            cf.cf_recommend_new_user({"nonexistent_beer_99999": 5.0}, n=5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CF PIPELINE — cf_recommend_updated()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCfRecommendUpdated:
+    """Test the fold-in path for an existing (trained) user blending their training
+    history with new session ratings."""
+
+    @pytest.fixture(autouse=True)
+    def _active_user_and_session(self):
+        rated_counts = cf.rating_matrix.notna().sum(axis=1)
+        self.user = rated_counts[rated_counts >= 5].index[0]
+        already_rated = set(cf.rating_matrix.loc[self.user].dropna().index)
+        candidates = [b for b in cf.beer_ids[:50] if b not in already_rated][:2]
+        self.session_ratings = {b: 5.0 for b in candidates}
+
+    def test_returns_series(self):
+        result = cf.cf_recommend_updated(self.user, self.session_ratings, n=10)
+        assert isinstance(result, pd.Series)
+
+    def test_raises_value_error_for_unknown_user(self):
+        with pytest.raises(ValueError, match="not found"):
+            cf.cf_recommend_updated("nonexistent_user_99999", self.session_ratings, n=5)
+
+    def test_excludes_historical_and_session_ratings(self):
+        already_rated = set(cf.rating_matrix.loc[self.user].dropna().index)
+        result = cf.cf_recommend_updated(self.user, self.session_ratings, n=50)
+        excluded = already_rated | set(self.session_ratings)
+        assert set(result.index).isdisjoint(excluded)
+
+    def test_ascending_and_descending_are_disjoint(self):
+        best = cf.cf_recommend_updated(self.user, self.session_ratings, n=10, ascending=False)
+        worst = cf.cf_recommend_updated(self.user, self.session_ratings, n=10, ascending=True)
+        assert set(best.index).isdisjoint(set(worst.index))
+        assert list(worst.values) == sorted(worst.values)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CB PIPELINE — make_demo_data()
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -452,6 +564,85 @@ class TestCBRecommend:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CB PIPELINE — cb_recommend(..., specific=...)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCbRecommendSpecific:
+    """Regression coverage: cb_recommend(..., specific=...) must return a plain
+    scalar (previously returned a 1-element numpy array via np.where, which broke
+    JSON serialization in get_beer_compatability once build_user_profile started
+    succeeding for real users)."""
+
+    @pytest.fixture(autouse=True)
+    def _sample_user_and_beer(self):
+        self.user = cb.train_df["username"].iloc[0]
+        already_rated = set(cb.train_df[cb.train_df["username"] == self.user]["beer_id"])
+        self.target = next(b for b in cb.item_profiles["beer_id"] if b not in already_rated)
+
+    def test_returns_a_scalar(self):
+        result = cb.cb_recommend(self.user, specific=self.target)
+        assert isinstance(result, (float, np.floating))
+        assert np.isfinite(result)
+
+    def test_matches_full_ranking_score(self):
+        full = cb.cb_recommend(self.user, n=len(cb.item_profiles))
+        specific_score = cb.cb_recommend(self.user, specific=self.target)
+        assert specific_score == pytest.approx(full[self.target])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CB PIPELINE — cb_recommend_from_ratings()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCbRecommendFromRatings:
+    """Test the CB cold-start fallback used for users not in the training data,
+    scored directly from their session ratings."""
+
+    @pytest.fixture(autouse=True)
+    def _rated_beers(self):
+        sample = list(cb.beer_ids[:5])
+        self.rated_beers = dict(zip(sample, [5.0, 4.0, 5.0, 2.0, 3.0]))
+
+    def test_returns_series(self):
+        result = cb.cb_recommend_from_ratings(self.rated_beers, n=10)
+        assert isinstance(result, pd.Series)
+
+    def test_returns_at_most_n_items(self):
+        result = cb.cb_recommend_from_ratings(self.rated_beers, n=5)
+        assert len(result) <= 5
+
+    def test_excludes_rated_beers_from_results(self):
+        result = cb.cb_recommend_from_ratings(self.rated_beers, n=100)
+        assert set(result.index).isdisjoint(set(self.rated_beers))
+
+    def test_ascending_and_descending_are_disjoint(self):
+        best = cb.cb_recommend_from_ratings(self.rated_beers, n=10, ascending=False)
+        worst = cb.cb_recommend_from_ratings(self.rated_beers, n=10, ascending=True)
+        assert set(best.index).isdisjoint(set(worst.index))
+
+    def test_specific_returns_scalar_matching_full_ranking(self):
+        # STYLE_CAP means even a huge n doesn't cover the whole catalog, so pick a
+        # target guaranteed to actually appear in a ranking rather than an arbitrary id.
+        full = cb.cb_recommend_from_ratings(self.rated_beers, n=100)
+        target = full.index[50]
+        specific_score = cb.cb_recommend_from_ratings(self.rated_beers, specific=target)
+        assert isinstance(specific_score, (float, np.floating))
+        assert specific_score == pytest.approx(full[target])
+
+    def test_raises_value_error_when_no_valid_beers(self):
+        with pytest.raises(ValueError, match="No rated beers found"):
+            cb.cb_recommend_from_ratings({"nonexistent_beer_99999": 5.0}, n=5)
+
+    def test_style_cap_limits_representation_per_style(self):
+        # STYLE_CAP=5 inside cb_recommend_from_ratings should prevent one dominant
+        # style from sweeping every slot.
+        result = cb.cb_recommend_from_ratings(self.rated_beers, n=50)
+        style_by_id = cb.item_profiles.set_index("beer_id")["beer_style"]
+        style_counts = style_by_id.reindex(result.index).value_counts()
+        assert (style_counts <= 5).all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CB PIPELINE — get_recommendation_details()
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -484,6 +675,84 @@ class TestGetRecommendationDetails:
         result = cb.get_recommendation_details(self.scores)
         for _, row in result.iterrows():
             assert abs(row["cb_score"] - self.scores[row["beer_id"]]) < 1e-9
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COLD START — cold_start_from_attributes()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestColdStartFromAttributes:
+    """Test the Method-2 (attribute quiz) cold-start scorer."""
+
+    def test_returns_series(self):
+        result = cold_start.cold_start_from_attributes(4, 3, 3, 4, "medium", ["IPA"], n=10)
+        assert isinstance(result, pd.Series)
+
+    def test_returns_at_most_n_items(self):
+        result = cold_start.cold_start_from_attributes(4, 3, 3, 4, "medium", ["IPA"], n=5)
+        assert len(result) <= 5
+
+    def test_scores_sorted_descending(self):
+        result = cold_start.cold_start_from_attributes(4, 3, 3, 4, "medium", ["IPA"], n=10)
+        assert list(result.values) == sorted(result.values, reverse=True)
+
+    def test_scores_within_signed_unit_range(self):
+        result = cold_start.cold_start_from_attributes(4, 3, 3, 4, "medium", ["IPA"], n=10)
+        assert result.min() >= -1.0
+        assert result.max() <= 1.0
+
+    def test_different_quiz_answers_yield_different_top_scores(self):
+        # Regression guard: a batch-relative min-max stretch used to force every
+        # quiz's top score to land at ~1.0 regardless of fit quality (masking real
+        # confidence differences and inflating match % on the frontend). Two
+        # different answers should now genuinely differ.
+        well_matched = cold_start.cold_start_from_attributes(5, 5, 4, 4, "medium", ["IPA"], n=10)
+        unusual = cold_start.cold_start_from_attributes(1, 1, 1, 1, "high", ["Sour"], n=10)
+        assert well_matched.max() != pytest.approx(unusual.max())
+
+    def test_style_cap_limits_representation_per_style(self):
+        result = cold_start.cold_start_from_attributes(4, 3, 3, 4, "medium", ["IPA"], n=50)
+        style_by_id = cold_start.item_profiles.set_index("beer_id")["beer_style"]
+        style_counts = style_by_id.reindex(result.index).value_counts()
+        assert (style_counts <= 5).all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COLD START — cold_start_from_ratings()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestColdStartFromRatings:
+    """Test the Method-1 (rated-beers) cold-start scorer, which blends CB (always)
+    with CF fold-in (once >= 3 ratings) via cf_trust_ramp-based weighting."""
+
+    @pytest.fixture(autouse=True)
+    def _rated_beers(self):
+        sample = list(cb.beer_ids[:6])
+        self.rated_beers = dict(zip(sample, [5.0, 4.0, 5.0, 2.0, 3.0, 4.0]))
+
+    def test_returns_series(self):
+        result = cold_start.cold_start_from_ratings(self.rated_beers, n=10)
+        assert isinstance(result, pd.Series)
+
+    def test_returns_at_most_n_items(self):
+        result = cold_start.cold_start_from_ratings(self.rated_beers, n=5)
+        assert len(result) <= 5
+
+    def test_scores_sorted_descending(self):
+        result = cold_start.cold_start_from_ratings(self.rated_beers, n=10)
+        assert list(result.values) == sorted(result.values, reverse=True)
+
+    def test_below_three_ratings_skips_cf_foldin(self):
+        # With < 3 ratings, cold_start_from_ratings should not attempt CF fold-in
+        # at all, so the result should exactly match a pure CB-only ranking.
+        two_ratings = dict(list(self.rated_beers.items())[:2])
+        result = cold_start.cold_start_from_ratings(two_ratings, n=10)
+        cb_only = cb.cb_recommend_from_ratings(two_ratings, n=10)
+        assert list(result.index) == list(cb_only.index)
+
+    def test_raises_value_error_when_no_valid_beers(self):
+        with pytest.raises(ValueError, match="No recommendations could be generated"):
+            cold_start.cold_start_from_ratings({"nonexistent_beer_99999": 5.0}, n=5)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
