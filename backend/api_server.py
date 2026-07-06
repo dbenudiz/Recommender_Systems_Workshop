@@ -343,8 +343,9 @@ async def get_beer_compatability(user_id: str, beer_id:str):
 
     if cf_score is not None and cb_score is not None:
         # Compute per-user CF weight: more ratings → more trust in CF signal
+        session_ratings = get_user_ratings(user_id)
         historical_count = cf.R_sparse.getrow(cf.user_id_to_index[user_id]).nnz if user_id in cf.user_id_to_index else 0
-        cf_weight = get_cf_weight(historical_count)
+        cf_weight = get_cf_weight(historical_count + len(session_ratings))
 
         beer_score = (cf_weight * cf_score) + ((1 - cf_weight) * cb_score)
     elif cf_score is not None or cb_score is not None:
