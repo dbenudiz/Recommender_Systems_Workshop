@@ -239,7 +239,8 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick,
     if (!beer?.id || !userId) return;
 
     if (beer.match_score > 0) {
-      setDynamicScore(normalizeScore(beer.match_score));
+      setDynamicScore(Math.round(beer.match_score * 100));
+      // setDynamicScore(normalizeScore(beer.match_score));
       return;
     }
 
