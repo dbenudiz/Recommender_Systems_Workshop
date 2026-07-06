@@ -1764,7 +1764,7 @@ const TopBeersPage = ({ onCardClick, favorites, onToggleFav }) => {
 
 // Shared fetch/loading/error logic for a single recommendation-derived swimlane
 // (used by AntiRecommenderPage, AdventurousPage, and the Home-tab swimlanes below).
-const useRecommendationLane = (userId, fetchFn, transformFn, recNum = 10) => {
+const useRecommendationLane = (userId, fetchFn, transformFn, recNum = 10, refreshKey) => {
   const [beers, setBeers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1794,14 +1794,14 @@ const useRecommendationLane = (userId, fetchFn, transformFn, recNum = 10) => {
 
   useEffect(() => {
     if (userId) refetch();
-  }, [userId, refetch]);
+  }, [userId, refetch, refreshKey]);
 
   return { beers, loading, error, refetch };
 };
 
 // Feeling Adventurous Page Component
-const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
-  const { beers, loading, error, refetch: fetchAdventurous } = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10);
+const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav, ratingVersion }) => {
+  const { beers, loading, error, refetch: fetchAdventurous } = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10, ratingVersion);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1855,8 +1855,8 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
   );
 };
 
-const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
-  const { beers, loading, error, refetch: fetchAnti } = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10);
+const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav, ratingVersion }) => {
+  const { beers, loading, error, refetch: fetchAnti } = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10, ratingVersion);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1931,8 +1931,8 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)"];
   const [shareVersion, setShareVersion] = useState(0);
 
-  const antiRec = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10);
-  const adventurousRec = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10);
+  const antiRec = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10, ratingVersion);
+  const adventurousRec = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10, ratingVersion);
 
   const unreadShareCount = useMemo(() => {
     if (!userId) return 0;
@@ -1981,7 +1981,6 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
                 { id: 'also-like', title: 'You Might Also Like', beers: sorted.slice(10, 20) },
               ],
             });
-            setDailyBeer(sorted[20] ?? null);
             return;
           } catch {
             // No personalization signal yet for this user (e.g. onboarding was
@@ -2003,12 +2002,10 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
             { id: 'popular', title: 'Popular Beers', beers: popular.slice(0, 20) },
           ],
         });
-        setDailyBeer(null);
       } catch (err) {
         if (cancelled) return;
         setApiError(err.message);
         setApiData(null);
-        setDailyBeer(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -2017,6 +2014,33 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
     fetchLiveData();
     return () => { cancelled = true; };
   }, [ratingVersion, userId, coldStartRecs]);
+
+  // Rubi's Daily Recommendation: session-level pick, deliberately NOT tied to
+  // ratingVersion — a rating event must never change today's pick.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchDailyBeer = async () => {
+      if (userId) {
+        try {
+          const { recommended_ids, scores } = await getRecommendations(userId, 21);
+          const scaled = toMatchFractions(scores);
+          const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
+          if (cancelled) return;
+          const beers = details.map((beer, i) => mapBeerToCard(beer, scaled[i]));
+          const sorted = [...beers].sort((a, b) => b.match_score - a.match_score);
+          setDailyBeer(sorted[20] ?? null);
+          return;
+        } catch {
+          // No personalization signal for this user (e.g. onboarding skipped) — fall through.
+        }
+      }
+      if (!cancelled) setDailyBeer(null);
+    };
+
+    fetchDailyBeer();
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const activeData = apiData;
 
@@ -2235,6 +2259,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
                 onCardClick={(beer) => setSelectedBeer(beer)}
                 favorites={favorites}
                 onToggleFav={toggleFavorite}
+                ratingVersion={ratingVersion}
               />
             )}
             {activeTab === 'build-six-pack' && <BuildSixPackPage allBeers={allUniqueBeers} onCardClick={(beer) => setSelectedBeer(beer)} />}
@@ -2255,6 +2280,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
             onCardClick={(beer) => setSelectedBeer(beer)}
             favorites={favorites}
             onToggleFav={toggleFavorite}
+            ratingVersion={ratingVersion}
           />
         )}
 
