@@ -343,8 +343,9 @@ async def get_beer_compatability(user_id: str, beer_id:str):
 
     if cf_score is not None and cb_score is not None:
         # Compute per-user CF weight: more ratings → more trust in CF signal
+        session_ratings = get_user_ratings(user_id)
         historical_count = cf.R_sparse.getrow(cf.user_id_to_index[user_id]).nnz if user_id in cf.user_id_to_index else 0
-        cf_weight = get_cf_weight(historical_count)
+        cf_weight = get_cf_weight(historical_count + len(session_ratings))
 
         beer_score = (cf_weight * cf_score) + ((1 - cf_weight) * cb_score)
     elif cf_score is not None or cb_score is not None:
@@ -353,7 +354,7 @@ async def get_beer_compatability(user_id: str, beer_id:str):
         raise HTTPException(status_code=404, detail="Invalid User or Beer ID")
 
     return {
-            beer_id: beer_score,
+            str(beer_id): beer_score,
         }
 
 @app.get("/recent/{user_id}")
@@ -891,8 +892,7 @@ def get_user_anti_candidates(user_id: str, candidate_num: int) -> pd.Series:
     except ValueError:
         pass
 
-    # New-user fallback: build anti-candidates directly from session ratings (CB only --
-    # cf_recommend_new_user doesn't support an ascending/worst-match mode).
+    # New-user fallback: build anti-candidates directly from session ratings.
     if cf_candidates is None and cb_candidates is None and session_ratings:
         try:
             cb_candidates = cb.cb_recommend_from_ratings(
@@ -900,6 +900,13 @@ def get_user_anti_candidates(user_id: str, candidate_num: int) -> pd.Series:
             )
         except ValueError:
             pass
+        if len(session_ratings) >= MIN_FOLDIN_RATINGS:
+            try:
+                cf_candidates = cf.cf_recommend_new_user(
+                    session_ratings, expanded_candidate_num, exclude_ids=exclude, ascending=True
+                )
+            except ValueError:
+                pass
 
     if cf_candidates is None and cb_candidates is None:
         raise ValueError(f"User '{user_id}' not found in either recommendation pipeline")

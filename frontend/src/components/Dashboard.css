@@ -830,6 +830,11 @@ input:checked + .slider:before {
   font-style: italic;
 }
 
+.anti-swimlane .swimlane {
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
 .anti-card-wrapper .beer-card {
   border: 1px solid rgba(220, 38, 38, 0.3);
   background: linear-gradient(180deg, #1e1e1e, rgba(220, 38, 38, 0.05));

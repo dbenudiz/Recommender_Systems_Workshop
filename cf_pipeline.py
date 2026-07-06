@@ -357,7 +357,8 @@ def cf_recommend(user_id: str, n: int = 10, exclude_ids=None, ascending: bool = 
     return scores.nsmallest(n) if ascending else scores.nlargest(n)
 
 
-def cf_recommend_new_user(rated_beers: dict, n: int = 10, exclude_ids=None) -> pd.Series:
+def cf_recommend_new_user(rated_beers: dict, n: int = 10, exclude_ids=None,
+                           ascending: bool = False) -> pd.Series:
     """
     CF recommendations for a brand-new user not in the training matrix.
 
@@ -390,7 +391,7 @@ def cf_recommend_new_user(rated_beers: dict, n: int = 10, exclude_ids=None) -> p
     scores = pd.Series(predictions, index=beer_ids)
     exclude_str = {str(b) for b in rated_beers} | {str(b) for b in (exclude_ids or [])}
     scores = scores[[b for b in scores.index if str(b) not in exclude_str]]
-    return scores.nlargest(n)
+    return scores.nsmallest(n) if ascending else scores.nlargest(n)
 
 
 def cf_recommend_updated(user_id: str, session_ratings: dict, n: int = 10,

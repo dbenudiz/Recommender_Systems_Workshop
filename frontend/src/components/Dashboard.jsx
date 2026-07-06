@@ -507,7 +507,7 @@ const BeerCard = ({ beer, onCardClick, isFav, onToggleFav, matchLabel = 'Match' 
 };
 
 // Swimlane
-const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
+const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav, hideTitle = false }) => {
   const scrollRef = useRef(null);
   const [showArrows, setShowArrows] = useState(false);
 
@@ -526,8 +526,8 @@ const Swimlane = ({ title, beers, onCardClick, favorites, onToggleFav }) => {
       onMouseEnter={() => setShowArrows(true)}
       onMouseLeave={() => setShowArrows(false)}
     >
-      <h2 className="swimlane-title">{title}</h2>
-      
+      {!hideTitle && <h2 className="swimlane-title">{title}</h2>}
+
       {/* Left Arrow */}
       <button 
         onClick={() => scroll('left')}
@@ -1688,8 +1688,9 @@ const TopBeersPage = ({ onCardClick, favorites, onToggleFav }) => {
   );
 };
 
-// Feeling Adventurous Page Component
-const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
+// Shared fetch/loading/error logic for a single recommendation-derived swimlane
+// (used by AntiRecommenderPage, AdventurousPage, and the Home-tab swimlanes below).
+const useRecommendationLane = (userId, fetchFn, transformFn, recNum = 10) => {
   const [beers, setBeers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1700,34 +1701,33 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const fetchAdventurous = useCallback(async () => {
+  const refetch = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { recommended_ids, scores } = await getAdventurousRecommendations(userId, 10);
-      const scaled = toMatchFractions(scores);
+      const { recommended_ids, scores } = await fetchFn(userId, recNum);
+      const scaled = transformFn(scores);
       const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
       if (!mountedRef.current) return;
-      setBeers(details.map((beer, i) => ({
-        id: beer.beer_id,
-        name: beer.beer_name,
-        style: beer.beer_style,
-        abv: beer.beer_abv,
-        match_score: scaled[i],
-        rating: beer.avg_overall_rating,
-        image_url: getBeerImage(beer.beer_style, beer.beer_id),
-      })));
+      setBeers(details.map((beer, i) => mapBeerToCard(beer, scaled[i])));
     } catch (err) {
       if (!mountedRef.current) return;
       setError(err.message);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [userId]);
+  }, [userId, fetchFn, transformFn, recNum]);
 
   useEffect(() => {
-    if (userId) fetchAdventurous();
-  }, [userId, fetchAdventurous]);
+    if (userId) refetch();
+  }, [userId, refetch]);
+
+  return { beers, loading, error, refetch };
+};
+
+// Feeling Adventurous Page Component
+const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
+  const { beers, loading, error, refetch: fetchAdventurous } = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1782,45 +1782,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
 };
 
 const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) => {
-  const [beers, setBeers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  const fetchAnti = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { recommended_ids, scores } = await getAntiRecommendations(userId, 10);
-      const scaled = toMismatchFractions(scores);
-      const details = await Promise.all(recommended_ids.map((id) => getBeerDetails(id)));
-      if (!mountedRef.current) return;
-      setBeers(details.map((beer, i) => ({
-        id: beer.beer_id,
-        name: beer.beer_name,
-        style: beer.beer_style,
-        abv: beer.beer_abv,
-        match_score: scaled[i],
-        matchLabel: 'Mismatch',
-        rating: beer.avg_overall_rating,
-        image_url: getBeerImage(beer.beer_style, beer.beer_id),
-      })));
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setError(err.message);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    if (userId) fetchAnti();
-  }, [userId, fetchAnti]);
+  const { beers, loading, error, refetch: fetchAnti } = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1895,6 +1857,9 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
   const [partyMembers, setPartyMembers] = useState(['Me']);
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)"];
   const [shareVersion, setShareVersion] = useState(0);
+
+  const antiRec = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10);
+  const adventurousRec = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10);
 
   const unreadShareCount = useMemo(() => {
     if (!userId) return 0;
@@ -2139,6 +2104,32 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
                         onToggleFav={toggleFavorite}
                       />
                     ))}
+                    {adventurousRec.beers.length > 0 && (
+                      <Swimlane
+                        title="Feeling Adventurous?"
+                        beers={adventurousRec.beers}
+                        onCardClick={(beer) => setSelectedBeer(beer)}
+                        favorites={favorites}
+                        onToggleFav={toggleFavorite}
+                      />
+                    )}
+                    {antiRec.beers.length > 0 && (
+                      <div className="anti-swimlane">
+                        <div className="anti-header">
+                          <span className="anti-icon">&#9888;</span>
+                          <h2 className="swimlane-title anti-title">Anti-Recommender List</h2>
+                          <span className="anti-icon">&#9888;</span>
+                        </div>
+                        <p className="anti-subtitle">Our model is pretty sure you'll hate these. Proceed at your own risk.</p>
+                        <Swimlane
+                          hideTitle
+                          beers={antiRec.beers}
+                          onCardClick={(beer) => setSelectedBeer(beer)}
+                          favorites={favorites}
+                          onToggleFav={toggleFavorite}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
               </>
