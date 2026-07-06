@@ -29,7 +29,7 @@ NEW_RATINGS_PATH = Path(__file__).resolve().parent.parent / "new_ratings.csv"
 
 STANDARD_CF_WEIGHT = 0.6   # CF weight for users with >= CF_WEIGHT_FULL_RATINGS ratings
 CF_WEIGHT_MIN = 0.1        # CF weight for new users with no rating history
-CF_WEIGHT_FULL_RATINGS = 20  # rating count at which CF weight reaches STANDARD_CF_WEIGHT
+CF_WEIGHT_FULL_RATINGS = 5  # rating count at which CF weight reaches STANDARD_CF_WEIGHT
 STANDARD_LAMBDA = 0.25
 STANDARD_GROUP_PENALTY = 0.5
 HYBRID_MULTIPLIER = 3
