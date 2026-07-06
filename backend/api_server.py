@@ -356,6 +356,15 @@ async def get_beer_compatability(user_id: str, beer_id:str):
             beer_id: beer_score,
         }
 
+@app.get("/recent/{user_id}")
+async def get_recent_ratings(user_id: str):
+    recent = get_user_ratings(user_id)
+
+    return {
+        "recommended_ids": list(recent.keys),
+        "scores": list(recent.values)
+    }
+
 @app.get("/recommendations/{user_id}/adventurous")
 async def get_adventurous_recommendations(user_id: str, rec_num: int = DEFAULT_RECOMMENDATION_NUM):
     """Return beers from the mid-range of a user's predicted scores — adventurous picks
