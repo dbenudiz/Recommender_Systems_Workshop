@@ -27,7 +27,7 @@ const toMatchFractions = (rawScores) => (rawScores || []).map(toMatchFraction);
 const toMismatchFractions = (rawScores) => (rawScores || []).map(s => 1 - toMatchFraction(s));
 
 
-const mapBeerToCard = (beer, score) => {
+const mapBeerToCard = (beer, score, matchLabel = 'Match') => {
   const rawId = beer.beer_id ?? beer.id;
   const safeId = Number(rawId);
 
@@ -37,6 +37,7 @@ const mapBeerToCard = (beer, score) => {
     style: beer.beer_style || beer.style,
     abv: beer.beer_abv || beer.abv,
     match_score: typeof score === 'number' ? score : 0,
+    matchLabel,
     rating: beer.avg_overall_rating || beer.rating,
     image_url: getBeerImage(beer.beer_style || beer.style, safeId),
   };
@@ -464,8 +465,9 @@ const BeerModal = ({ beer, onClose, userRatingData, onSubmitReview, onCardClick,
 };
 
 // --- BeerCard Component ---
-const BeerCard = ({ beer, onCardClick, isFav, onToggleFav, matchLabel = 'Match' }) => {
+const BeerCard = ({ beer, onCardClick, isFav, onToggleFav }) => {
   const matchPercentage = Math.round(beer.match_score * 100);
+  const matchLabel = beer.matchLabel || 'Match';
   
   return (
     <div className="beer-card-wrapper">
@@ -1833,7 +1835,6 @@ const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav }) =>
               onCardClick={onCardClick}
               isFav={favorites.some(favId => Number(favId) === Number(beer.id))}
               onToggleFav={onToggleFav}
-              matchLabel="Mismatch"
             />
           </div>
         ))}

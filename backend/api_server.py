@@ -785,10 +785,13 @@ def hybridize_candidates(cf_scores: pd.Series, cb_scores: pd.Series, candidate_n
 
 def hybrid_scores(cf_scores: pd.Series, cb_scores: pd.Series, cf_weight: int) -> pd.Series:
     """
-    Creates a weighted average of CF and CB scores
+    Creates a weighted average of CF and CB scores. A beer scored by only one
+    source keeps that source's own score un-multiplied, instead of being
+    silently discounted by the other source's implicit zero contribution
+    (mirrors the both/cf_only/cb_only blending in cold_start.cold_start_from_ratings).
 
     Parameters:
-    - cf_scores: Series of recommendation scores in the range (0,1) generated using CF 
+    - cf_scores: Series of recommendation scores in the range (0,1) generated using CF
       the index is the id and the value is that ids score
     - cb_scores: Series of recommendation scores in the range (0,1) generated using CB
       the index is the id and the value is that ids score
@@ -797,7 +800,19 @@ def hybrid_scores(cf_scores: pd.Series, cb_scores: pd.Series, cf_weight: int) ->
     Returns:
     - Series of the hybrid scores
     """
-    return (cf_weight * cf_scores).add((1 - cf_weight) * cb_scores, fill_value = 0)
+    all_ids = cf_scores.index.union(cb_scores.index)
+    cf_aligned = cf_scores.reindex(all_ids)
+    cb_aligned = cb_scores.reindex(all_ids)
+
+    both    = cf_aligned.notna() & cb_aligned.notna()
+    cf_only = cf_aligned.notna() & cb_aligned.isna()
+    cb_only = cb_aligned.notna() & cf_aligned.isna()
+
+    blended = pd.Series(0.0, index=all_ids)
+    blended[both]    = cf_weight * cf_aligned[both] + (1 - cf_weight) * cb_aligned[both]
+    blended[cf_only] = cf_aligned[cf_only]
+    blended[cb_only] = cb_aligned[cb_only]
+    return blended
 
 def get_user_rec_candidates(user_id: str, candidate_num: int) -> pd.Series:
     """
