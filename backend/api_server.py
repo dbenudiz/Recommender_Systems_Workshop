@@ -37,6 +37,8 @@ RERANK_MULTIPLIER = 2
 DEFAULT_RECOMMENDATION_NUM = 10
 MIN_FOLDIN_RATINGS = 5
 ADVENTURE_MIN_POOL_MULTIPLIER = 5  # mid_range must be this many times rec_num for real sampling variety
+ADVENTURE_LOWER_PERCENTILE = 0.60  # exclude the bottom 60% of the user's own candidate scores
+ADVENTURE_UPPER_PERCENTILE = 0.85  # exclude the top 15% ("safest"/most obvious picks)
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
@@ -390,13 +392,18 @@ async def get_adventurous_recommendations(user_id: str, rec_num: int = DEFAULT_R
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Filter to the 0.80–0.95 score band for genuine taste divergence
-    mid_range = large_pool[(large_pool >= 0.80) & (large_pool <= 0.95)]
+    # Filter to a relative percentile band of this user's own candidate scores
+    # (rather than an absolute cutoff) so "adventurous" behaves consistently
+    # whether the user is CF-heavy (trained) or CB-heavy (cold-start).
+    lower_bound = large_pool.quantile(ADVENTURE_LOWER_PERCENTILE)
+    upper_bound = large_pool.quantile(ADVENTURE_UPPER_PERCENTILE)
+    mid_range = large_pool[(large_pool >= lower_bound) & (large_pool <= upper_bound)]
 
     # If the band is too small relative to rec_num, sampling degenerates into
-    # returning the entire (deterministic) band every time — widen the pool instead.
+    # returning the entire (deterministic) band every time — widen by admitting
+    # more of the pool, but keep excluding the very best ("safest") picks.
     if len(mid_range) < rec_num * ADVENTURE_MIN_POOL_MULTIPLIER:
-        mid_range = large_pool.iloc[50:]
+        mid_range = large_pool[large_pool <= upper_bound]
 
     sample_size = min(rec_num, len(mid_range))
     if sample_size == 0:
