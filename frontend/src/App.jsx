@@ -7,21 +7,14 @@ import { saveColdStartRatings } from './services/authService';
 import ColdStartRouter from './components/ColdStartRouter';
 import StavAssistant from './components/StavAssistant'; 
 
-// TEMP DEMO: quick-switch users for live demoing trained vs. cold-start
-// behavior without re-registering through AuthScreen each time.
+// TEMP DEMO: jump straight to a real trained user (verified in
+// data/train_set.csv / artifacts/cf_user_ids.npy), skipping AuthScreen
+// registration entirely.
 const DEMO_TRAINED_USER = {
   email: 'demo@rubeer.dev',
   userId: 'Ungstrup', // exact case must match cf.user_id_to_index key
   username: 'Ungstrup (demo)',
   needsColdStart: false,
-  ratings: {},
-};
-
-const DEMO_COLD_START_USER = {
-  email: 'demo-cold@rubeer.dev',
-  userId: 'demo-cold@rubeer.dev',
-  username: 'New Demo User',
-  needsColdStart: true,
   ratings: {},
 };
 
@@ -60,12 +53,11 @@ function App() {
     setShowAuth(true);
   };
 
-  // TEMP DEMO: jump straight to a trained or cold-start user, skipping
-  // AuthScreen/registration entirely.
-  const handleDemoSwitch = (demoUser) => {
+  // TEMP DEMO: jump straight to the trained demo user.
+  const handleDemoLogin = () => {
     setColdStartRecs(null);
     setIsNewUser(false);
-    handleLogin(demoUser, demoUser.needsColdStart);
+    handleLogin(DEMO_TRAINED_USER, false);
   };
 
   const renderCurrentScreen = () => {
@@ -107,24 +99,30 @@ function App() {
     <>
       {renderCurrentScreen()}
       {isLoggedIn && <StavAssistant />}
-      {/* TEMP DEMO: quick-switch panel, remove before shipping */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 12,
-          right: 12,
-          zIndex: 9999,
-          display: 'flex',
-          gap: 8,
-        }}
-      >
-        <button onClick={() => handleDemoSwitch(DEMO_TRAINED_USER)}>
+      {/* TEMP DEMO: quick-switch button, remove before shipping */}
+      {!currentUser && (
+      <div style={{ position: 'fixed', bottom: 12, left: 12, zIndex: 9999 }}>
+        <button
+          onClick={handleDemoLogin}
+          style={{
+            backgroundColor: '#E67E22',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            padding: '0.6rem 1rem',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#d67118'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#E67E22'; }}
+        >
           Demo: Trained User
         </button>
-        <button onClick={() => handleDemoSwitch(DEMO_COLD_START_USER)}>
-          Demo: Cold Start
-        </button>
       </div>
+      )}
     </>
   );
 }
