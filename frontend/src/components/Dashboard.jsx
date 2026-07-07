@@ -24,7 +24,6 @@ const toMatchFraction = (rawScore) => {
 };
 
 const toMatchFractions = (rawScores) => (rawScores || []).map(toMatchFraction);
-const toMismatchFractions = (rawScores) => (rawScores || []).map(s => 1 - toMatchFraction(s));
 
 
 const mapBeerToCard = (beer, score, matchLabel = 'Match') => {
@@ -1856,7 +1855,7 @@ const AdventurousPage = ({ userId, onCardClick, favorites, onToggleFav, ratingVe
 };
 
 const AntiRecommenderPage = ({ userId, onCardClick, favorites, onToggleFav, ratingVersion }) => {
-  const { beers, loading, error, refetch: fetchAnti } = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10, ratingVersion);
+  const { beers, loading, error, refetch: fetchAnti } = useRecommendationLane(userId, getAntiRecommendations, toMatchFractions, 10, ratingVersion);
 
   if (!userId) return (
     <div className="empty-state">
@@ -1931,7 +1930,7 @@ const RecommenderDashboard = ({ onLogout, coldStartRecs, userId, isNewUser = fal
   const friendDatabase = ["Alex (Lager Lover)", "Sarah (Hops Fanatic)", "David (Stout Guy)"];
   const [shareVersion, setShareVersion] = useState(0);
 
-  const antiRec = useRecommendationLane(userId, getAntiRecommendations, toMismatchFractions, 10, ratingVersion);
+  const antiRec = useRecommendationLane(userId, getAntiRecommendations, toMatchFractions, 10, ratingVersion);
   const adventurousRec = useRecommendationLane(userId, getAdventurousRecommendations, toMatchFractions, 10, ratingVersion);
 
   const unreadShareCount = useMemo(() => {
