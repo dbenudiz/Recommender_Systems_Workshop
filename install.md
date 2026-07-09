@@ -14,7 +14,7 @@ You will need:
 
 2. **Install Python dependencies:**
    ```powershell
-   py -m pip install psycopg2-binary pandas scikit-learn scipy numpy pytest "fastapi[standard]" uvicorn joblib httpx google-genai rapidfuzz python-dotenv
+   py -m pip install psycopg2-binary pandas scikit-learn scipy numpy pytest "fastapi[standard]" uvicorn joblib httpx google-genai rapidfuzz python-dotenv statsmodels
    ```
 
 3. **Start the PostgreSQL service and create the database:**
@@ -39,7 +39,7 @@ You will need:
    ```powershell
    py data_processing/pipeline.py
    ```
-   This writes `train_set.csv`, `val_set.csv`, `test_set.csv`, and `item_profiles_for_cold_start.csv` into a `data/` subdirectory.
+   This writes `train_set_enriched.csv`, `val_set_enriched.csv`, `test_set_enriched.csv`, and `item_profiles_for_cold_start_enriched.csv` into the current directory. Create a `data/` subdirectory and move/rename these four files into it as `train_set.csv`, `val_set.csv`, `test_set.csv`, and `item_profiles_for_cold_start.csv` — the plain names the pipelines and `train_models.py` expect.
 
 7. **Train the models:**
    ```powershell
@@ -65,7 +65,7 @@ You will need:
     npm run dev
     ```
 
-11. Open **http://localhost:5173** in your browser. Toggle "Demo Data" off to see live recommendations.
+11. Open **http://localhost:5173** in your browser.
 
 ## Post-install / Verification
 
