@@ -35,9 +35,48 @@ More information can be found on the [Workshop Website](https://courses.cs.tau.a
 &nbsp;<br>
 
 ## Screenshots
-
-Here is a screenshot of the application interface:
-
+### Home Page
 ![Application Screenshot](Images/mainpage.jpeg)
-![Application Screenshot](Images/inspectbeer.jpeg)
-![Application Screenshot](Images/sixpack.jpeg)
+
+### Beer Card 
+![Beer card](Images/inspectbeer.jpeg)
+
+### Explore
+![Explore]()
+
+### Build a 6-Pack
+![Build a 6-Pack](Images/sixpack.jpeg)
+
+### Share a Beer
+![Share a Beer]()
+
+### Beer Lists
+![Beer Lists](Images/beer_list.jpg)
+
+### Favorites
+![Favorites](Images/faves.jpg)
+
+### Shared With Me
+![Shared With Me](Images/Shared_with_me.jpg)
+
+### Feeling Adventurous
+![Feeling Adventurous]()
+
+### Anti-Recommender List
+![Anti-Recommender List]()
+
+### Top 50 Rated All-Time
+![Top 50 Rated All-Time]()
+
+### Scan Menu
+![Scan Menu]()
+
+### Stav AI Assistant
+![Stav AI Assistant]()
+
+### Cold-Start Onboarding
+![Cold-Start Onboarding](Images/cold_start_homepage.jpg)
+
+### Cold-Start Onboarding - Method 1
+
+### Cold-Start Onboarding - Method 2
