@@ -100,7 +100,7 @@ Hybrid CF/CB blending weights are evaluated separately via `py train_models.py -
 
 ## Main Features
 
-- **Personalised recommendation feed** — hybrid CF + CB swimlanes ("Top Matches", "You Might Also Like") on the Home tab, MMR-reranked for diversity. Users with no rating signal yet see a clearly-labeled "Popular Beers" list instead — the app never substitutes another user's personalized feed.
+- **Personalised recommendation feed** — hybrid CF + CB swimlanes ("Top Matches", "You Might Also Like") on the Home tab, with scaling weights based on how well we know the user, and MMR-reranked for diversity. Users with no rating signal yet see a clearly-labeled "Popular Beers" list instead.
 - **Cold-start onboarding** — new users choose between two methods: search for beers they know and rate them (Method 1, recommended, minimum 3 ratings), or rate the importance of taste/aroma/appearance/palate and select preferred styles (Method 2, guided fallback). Recommendations are available immediately after onboarding, before any further in-app interactions. Both methods persist the resulting ratings to the online store, so recommendations stay personalized (and diversified across beer styles) after a page refresh or backend restart.
 - **Real-time feedback loop** — rating a beer instantly removes it from feeds, applies score adjustments to similar beers, and triggers SVD fold-in so recommendations update live without retraining.
 - **Adventurous tab** — surfaces picks that diverge from the user's core taste by randomly sampling the 60th–85th percentile band of their own predicted-score distribution, skipping both the safest top matches and the worst-fit beers; includes a "Surprise Me Again" button that re-samples the band for a fresh set.

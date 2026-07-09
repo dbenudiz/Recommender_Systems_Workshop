@@ -41,6 +41,12 @@ You will need:
    ```
    This writes `train_set_enriched.csv`, `val_set_enriched.csv`, `test_set_enriched.csv`, and `item_profiles_for_cold_start_enriched.csv` into the current directory. Create a `data/` subdirectory and move/rename these four files into it as `train_set.csv`, `val_set.csv`, `test_set.csv`, and `item_profiles_for_cold_start.csv` — the plain names the pipelines and `train_models.py` expect.
 
+**Alternative to step 7**:
+```
+If you don't want to train the models yourself you can use our pre trained artifacts:
+https://drive.google.com/drive/folders/1YlMvoBZrwN_WCzHYXE3bQ9eQG8hp7fc6?usp=sharing
+```
+
 7. **Train the models:**
    ```powershell
    py train_models.py
