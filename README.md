@@ -42,13 +42,13 @@ More information can be found on the [Workshop Website](https://courses.cs.tau.a
 ![Beer card](Images/inspectbeer.jpeg)
 
 ### Explore
-![Explore]()
+![Explore](Images/explore.jpg)
 
 ### Build a 6-Pack
 ![Build a 6-Pack](Images/sixpack.jpeg)
 
 ### Share a Beer
-![Share a Beer]()
+![Share a Beer](Images/share.jpg)
 
 ### Beer Lists
 ![Beer Lists](Images/beer_list.jpg)
@@ -59,24 +59,36 @@ More information can be found on the [Workshop Website](https://courses.cs.tau.a
 ### Shared With Me
 ![Shared With Me](Images/Shared_with_me.jpg)
 
+### User Profile
+![Profile](Images/profile.jpg)
+
+### Friend Compatibility
+![friends](Images/friendcomp.jpg)
+
+### Rubi's Daily Recommendation
+![DailyRec](Images/DailyREc.jpg)
+
 ### Feeling Adventurous
-![Feeling Adventurous]()
+![Feeling Adventurous](Images/adventurous.jpg)
 
 ### Anti-Recommender List
-![Anti-Recommender List]()
+![Anti-Recommender List](Images/anti.jpg)
 
 ### Top 50 Rated All-Time
-![Top 50 Rated All-Time]()
+![Top 50 Rated All-Time](Images/top50.jpg)
 
 ### Scan Menu
-![Scan Menu]()
+![Scan Menu](Images/scan1.jpg)
+![Scan Menu](Images/scan2.jpg)
 
 ### Stav AI Assistant
-![Stav AI Assistant]()
+![Stav AI Assistant](Images/StavAi.jpg)
 
 ### Cold-Start Onboarding
 ![Cold-Start Onboarding](Images/cold_start_homepage.jpg)
 
 ### Cold-Start Onboarding - Method 1
+![cold1](Images/cold1.jpg)
 
 ### Cold-Start Onboarding - Method 2
+![cold2](Images/cold2.jpg)
